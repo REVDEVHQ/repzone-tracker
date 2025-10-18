@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RepZone Tracker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; width: 100%; overflow: hidden; }
+  #repzone-app { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 99999 !important; }
+  .leaflet-container { height: 100% !important; width: 100% !important; }
+  .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .tracking-indicator { animation: pulse 2s infinite; }
+</style>
+</head>
+<body>
+<div id="repzone-app"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+const SUPABASE_URL='https://cytikhfyygkovnjtpsth.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5dGlraGZ5eWdrb3ZuanRwc3RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA3MTc3NzYsImV4cCI6MjA3NjI5Mzc3Nn0.ItJObIXo_Ks8TEigj5RkUA4vXbze_3FMMIzYyVHrthQ';
+const COLORS=["#ef4444","#3b82f6","#10b981","#f59e0b","#8b5cf6","#ec4899"];
+
+function calculateDistance(lat1,lon1,lat2,lon2){
+  const R=6371e3;
+  const φ1=lat1*Math.PI/180;
+  const φ2=lat2*Math.PI/180;
+  const Δφ=(lat2-lat1)*Math.PI/180;
+  const Δλ=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(Δφ/2)*Math.sin(Δφ/2)+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)*Math.sin(Δλ/2);
+  const c=2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  return R*c*3.28084;
+}
+
+function getVerificationStatus(d){
+  if(d<=50)return{status:'verified',color:'#10b981',icon:'✅',label:'Verified'};
+  if(d<=150)return{status:'questionable',color:'#f59e0b',icon:'⚠️',label:'Questionable'};
+  return{status:'suspicious',color:'#ef4444',icon:'🚫',label:'Suspicious'};
+}
+
+function RepZoneApp(){
+  const[pins,setPins]=useState([]);
+  const[zones,setZones]=useState([]);
+  const[teamMembers,setTeamMembers]=useState([]);
+  const[liveLocations,setLiveLocations]=useState([]);
+  const[currentUser,setCurrentUser]=useState(null);
+  const[currentLocation,setCurrentLocation]=useState(null);
+  const[mode,setMode]=useState("drop-pin");
+  const[status,setStatus]=useState("knocked");
+  const[activeZoneId,setActiveZoneId]=useState(null);
+  const[note,setNote]=useState("");
+  const[filter,setFilter]=useState({status:"all",userId:"all"});
+  const[loading,setLoading]=useState(true);
+  const[saving,setSaving]=useState(false);
+  const[mapReady,setMapReady]=useState(false);
+  const[trackingEnabled,setTrackingEnabled]=useState(false);
+  const[showLiveTracking,setShowLiveTracking]=useState(true);
+  const[isMobile,setIsMobile]=useState(window.innerWidth<768);
+  
+  const mapRef=useRef(null);
+  const mapInstanceRef=useRef(null);
+  const supabase=useRef(null);
+  const locationWatchId=useRef(null);
+  const locationUpdateInterval=useRef(null);
+
+  useEffect(()=>{
+    const h=()=>setIsMobile(window.innerWidth<768);
+    window.addEventListener('resize',h);
+    return()=>window.removeEventListener('resize',h);
+  },[]);
+
+  useEffect(()=>{
+    supabase.current=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+    loadData();
+    const s=localStorage.getItem('current_user_id');
+    if(s){
+      const u=JSON.parse(s);
+      setCurrentUser(u);
+      requestLocationPermission(u);
+    }
+  },[]);
+
+  useEffect(()=>{
+    if(!supabase.current)return;
+    loadLiveLocations();
+    const i=setInterval(loadLiveLocations,10000);
+    return()=>clearInterval(i);
+  },[]);
+
+  async function loadLiveLocations(){
+    try{
+      const fiveMin=new Date(Date.now()-5*60*1000).toISOString();
+      const{data,error}=await supabase.current.from('live_locations').select('*').gte('last_updated',fiveMin).eq('is_active',true);
+      if(!error&&data)setLiveLocations(data);
+    }catch(e){}
+  }
+
+  async function requestLocationPermission(u){
+    if(!navigator.geolocation){
+      alert('Location not supported');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      p=>startLocationTracking(u),
+      e=>console.error('Location error:',e)
+    );
+  }
+
+  function startLocationTracking(u){
+    if(!u||locationWatchId.current)return;
+    setTrackingEnabled(true);
+    locationWatchId.current=navigator.geolocation.watchPosition(
+      p=>{
+        const l={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy};
+        setCurrentLocation(l);
+      },
+      e=>console.error('Tracking error:',e),
+      {enableHighAccuracy:true,maximumAge:10000,timeout:5000}
+    );
+    locationUpdateInterval.current=setInterval(()=>{
+      if(currentLocation&&u)updateLiveLocation(u.id,currentLocation);
+    },30000);
+  }
+
+  function stopLocationTracking(){
+    if(locationWatchId.current){
+      navigator.geolocation.clearWatch(locationWatchId.current);
+      locationWatchId.current=null;
+    }
+    if(locationUpdateInterval.current){
+      clearInterval(locationUpdateInterval.current);
+      locationUpdateInterval.current=null;
+    }
+    setTrackingEnabled(false);
+    if(currentUser){
+      supabase.current.from('live_locations').update({is_active:false}).eq('team_member_id',currentUser.id).then(()=>{});
+    }
+  }
+
+  async function updateLiveLocation(uid,loc){
+    try{
+      const d={
+        id:`loc-${uid}-${Date.now()}`,
+        team_member_id:uid,
+        lat:loc.lat,
+        lng:loc.lng,
+        accuracy:loc.accuracy,
+        last_updated:new Date().toISOString(),
+        is_active:true
+      };
+      await supabase.current.from('live_locations').upsert(d,{onConflict:'team_member_id'});
+      loadLiveLocations();
+    }catch(e){
+      console.error('Update location error:',e);
+    }
+  }
+
+  useEffect(()=>{
+    if(currentLocation&&currentUser&&trackingEnabled){
+      updateLiveLocation(currentUser.id,currentLocation);
+    }
+  },[currentLocation,currentUser,trackingEnabled]);
+
+  useEffect(()=>()=>stopLocationTracking(),[]);
+
+  async function loadData(){
+    try{
+      const[p,z,t]=await Promise.all([
+        supabase.current.from('pins').select('*'),
+        supabase.current.from('zones').select('*'),
+        supabase.current.from('team_members').select('*')
+      ]);
+      setPins(p.data||[]);
+      setZones(z.data||[]);
+      setTeamMembers(t.data||[]);
+    }catch(e){
+      console.error('Load error:',e);
+    }
+    setLoading(false);
+  }
+
+  async function deletePin(id){
+    if(!confirm('Delete?'))return;
+    await supabase.current.from('pins').delete().eq('id',id);
+    setPins(p=>p.filter(x=>x.id!==id));
+  }
+
+  async function updatePinStatus(id,s){
+    await supabase.current.from('pins').update({status:s}).eq('id',id);
+    setPins(p=>p.map(x=>x.id===id?{...x,status:s}:x));
+  }
+
+  useEffect(()=>{
+    window.deletePinGlobal=deletePin;
+    window.updatePinStatusGlobal=updatePinStatus;
+    return()=>{
+      delete window.deletePinGlobal;
+      delete window.updatePinStatusGlobal;
+    };
+  },[]);
+
+  function selectCurrentUser(u){
+    setCurrentUser(u);
+    localStorage.setItem('current_user_id',JSON.stringify(u));
+    requestLocationPermission(u);
+  }
+
+  useEffect(()=>{
+    if(!mapRef.current||mapInstanceRef.current||loading)return;
+    const m=L.map(mapRef.current,{
+      center:[47.6062,-122.3321],
+      zoom:isMobile?12:13,
+      zoomControl:!isMobile
+    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      attribution:'© OpenStreetMap'
+    }).addTo(m);
+    if(isMobile)L.control.zoom({position:'bottomright'}).addTo(m);
+    mapInstanceRef.current=m;
+    setTimeout(()=>{
+      m.invalidateSize();
+      setMapReady(true);
+    },300);
+  },[loading,isMobile]);
+
+  useEffect(()=>{
+    const m=mapInstanceRef.current;
+    if(!m||!mapReady)return;
+    const hc=async(e)=>{
+      const{lat,lng}=e.latlng;
+      if(mode==="drop-pin"&&currentUser){
+        if(!currentLocation){
+          alert('Enable location');
+          return;
+        }
+        setSaving(true);
+        const d=calculateDistance(currentLocation.lat,currentLocation.lng,lat,lng);
+        const v=getVerificationStatus(d);
+        const np={
+          id:`pin-${Date.now()}`,
+          lat,lng,status,
+          rep_name:currentUser.name,
+          team_member_id:currentUser.id,
+          note:note||null,
+          actual_lat:currentLocation.lat,
+          actual_lng:currentLocation.lng,
+          distance_from_pin:Math.round(d),
+          verification_status:v.status,
+          created_at:new Date().toISOString()
+        };
+        await supabase.current.from('pins').insert([np]);
+        setPins(p=>[...p,np]);
+        setNote("");
+        setSaving(false);
+        if(v.status==='suspicious')alert(`⚠️ ${Math.round(d)}ft away - Suspicious!`);
+      }else if(mode==="draw-zone"){
+        const id=activeZoneId||`zone-${Date.now()}`;
+        const ex=zones.find(z=>z.id===id);
+        const npts=ex?[...ex.points,[lat,lng]]:[[lat,lng]];
+        if(ex){
+          await supabase.current.from('zones').update({points:npts}).eq('id',id);
+          setZones(p=>p.map(z=>z.id===id?{...z,points:npts}:z));
+        }else{
+          const nz={
+            id,
+            name:`Zone ${zones.length+1}`,
+            color:COLORS[zones.length%COLORS.length],
+            points:npts,
+            created_by:currentUser?.name||'Admin',
+            created_at:new Date().toISOString()
+          };
+          await supabase.current.from('zones').insert([nz]);
+          setZones(p=>[...p,nz]);
+        }
+        setActiveZoneId(id);
+      }
+    };
+    m.on('click',hc);
+    m.on('dblclick',()=>{
+      if(mode==="draw-zone"&&activeZoneId){
+        setActiveZoneId(null);
+        setMode("select");
+      }
+    });
+    return()=>m.off('click',hc);
+  },[mode,status,note,activeZoneId,zones,mapReady,currentUser,currentLocation]);
+
+  useEffect(()=>{
+    const m=mapInstanceRef.current;
+    if(!m||!mapReady)return;
+    m.eachLayer(l=>{
+      if(l instanceof L.Polygon||l instanceof L.Marker||l instanceof L.Circle)m.removeLayer(l);
+    });
+
+    zones.forEach(z=>{
+      if(z.points?.length>=3){
+        const a=teamMembers.find(u=>u.id===z.assigned_to);
+        L.polygon(z.points,{
+          color:a?.color||z.color,
+          fillColor:a?.color||z.color,
+          fillOpacity:0.2,
+          weight:3
+        }).addTo(m).bindPopup(`<b>${z.name}</b><br>${a?a.name:'Unassigned'}`);
+      }
+    });
+
+    if(showLiveTracking){
+      liveLocations.forEach(loc=>{
+        const mem=teamMembers.find(u=>u.id===loc.team_member_id);
+        if(!mem||loc.team_member_id===currentUser?.id)return;
+        const min=Math.floor((Date.now()-new Date(loc.last_updated))/60000);
+        const isRec=min<5;
+        L.circle([loc.lat,loc.lng],{
+          radius:30,
+          color:mem.color,
+          fillColor:mem.color,
+          fillOpacity:isRec?0.4:0.2,
+          weight:3
+        }).addTo(m);
+        const ico=L.divIcon({
+          html:`<div style="background:${mem.color};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.125rem;border:4px solid white;box-shadow:0 2px 12px rgba(0,0,0,0.3)">${mem.name.charAt(0)}</div>`,
+          iconSize:[40,40],
+          iconAnchor:[20,20]
+        });
+        L.marker([loc.lat,loc.lng],{icon:ico}).addTo(m);
+      });
+    }
+
+    if(currentLocation&&currentUser){
+      L.circle([currentLocation.lat,currentLocation.lng],{
+        radius:50,
+        color:currentUser.color,
+        fillColor:currentUser.color,
+        fillOpacity:0.3,
+        weight:2
+      }).addTo(m);
+      const yico=L.divIcon({
+        html:`<div style="background:${currentUser.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.4)">${currentUser.name.charAt(0)}</div>`,
+        iconSize:[48,48],
+        iconAnchor:[24,24]
+      });
+      L.marker([currentLocation.lat,currentLocation.lng],{icon:yico}).addTo(m);
+    }
+
+    const filt=pins.filter(p=>{
+      if(filter.status!=="all"&&p.status!==filter.status)return false;
+      if(filter.userId!=="all"&&p.team_member_id!==filter.userId)return false;
+      return true;
+    });
+
+    filt.forEach(p=>{
+      const u=teamMembers.find(x=>x.id===p.team_member_id);
+      const icons={knocked:"✅",flyer:"📬",skipped:"⏭️"};
+      const v=p.verification_status?getVerificationStatus(p.distance_from_pin||0):null;
+      const ico=L.divIcon({
+        html:`<div style="background:${u?.color||'#64748b'};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid ${v?v.color:'white'};box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative">${icons[p.status]}${v?`<div style="position:absolute;top:-8px;right:-8px;background:${v.color};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white">${v.icon}</div>`:''}</div>`,
+        iconSize:[36,36],
+        iconAnchor:[18,36]
+      });
+      const mar=L.marker([p.lat,p.lng],{icon:ico}).addTo(m);
+      mar.bindPopup(`<div style="min-width:200px;padding:12px"><div style="font-size:20px;margin-bottom:8px">${icons[p.status]} <b>${p.status.toUpperCase()}</b></div><div style="padding:8px;background:${u?.color||'#64748b'}22;border-left:3px solid ${u?.color||'#64748b'};margin-bottom:8px"><b>👤 ${p.rep_name||'Unknown'}</b></div>${p.note?`<div style="font-size:13px;margin-bottom:8px">📝 ${p.note}</div>`:''}${v?`<div style="padding:8px;background:${v.color}22;border-left:3px solid ${v.color};margin-bottom:8px"><b style="color:${v.color}">${v.icon} ${p.distance_from_pin}ft away</b></div>`:''}<div style="font-size:11px;color:#64748b;margin-bottom:12px">${new Date(p.created_at).toLocaleString()}</div><button onclick="window.updatePinStatusGlobal('${p.id}','knocked')" style="padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;cursor:pointer;margin:4px">✅</button><button onclick="window.updatePinStatusGlobal('${p.id}','flyer')" style="padding:8px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;margin:4px">📬</button><button onclick="window.deletePinGlobal('${p.id}')" style="width:100%;margin-top:8px;padding:8px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer">🗑️ Delete</button></div>`);
+    });
+  },[pins,zones,filter,mapReady,teamMembers,liveLocations,currentLocation,currentUser,showLiveTracking]);
+
+  if(loading){
+    return(
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:'1rem',background:'#f8fafc'}}>
+        <div className="spinner"></div>
+        <p style={{color:'#64748b',fontWeight:'500'}}>Loading RepZone...</p>
+      </div>
+    );
+  }
+
+  if(!currentUser){
+    return(
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'#f8fafc',padding:'1rem'}}>
+        <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
+          <h2 style={{fontSize:'1.5rem',fontWeight:'bold',marginBottom:'1rem'}}>Select User</h2>
+          {teamMembers.map(m=>(
+            <div key={m.id} onClick={()=>selectCurrentUser(m)} style={{padding:'1rem',marginBottom:'0.5rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'1rem'}}>
+              <div style={{width:'48px',height:'48px',borderRadius:'50%',background:m.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem'}}>
+                {m.name.charAt(0)}
+              </div>
+              <div><div style={{fontWeight:'600',fontSize:'1.125rem'}}>{m.name}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const stats={
+    totalPins:pins.length,
+    knocked:pins.filter(p=>p.status==='knocked').length,
+    verified:pins.filter(p=>p.verification_status==='verified').length,
+    suspicious:pins.filter(p=>p.verification_status==='suspicious').length,
+    onlineUsers:liveLocations.filter(l=>new Date(l.last_updated)>new Date(Date.now()-5*60*1000)).length
+  };
+
+  return(
+    <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#f8fafc'}}>
+      {saving&&(
+        <div style={{position:'fixed',top:'1rem',left:'50%',transform:'translateX(-50%)',background:'white',padding:'0.75rem 1.5rem',borderRadius:'2rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10001,display:'flex',gap:'0.75rem',alignItems:'center'}}>
+          <div className="spinner" style={{width:'20px',height:'20px'}}></div>
+          <span style={{fontWeight:'600'}}>Saving...</span>
+        </div>
+      )}
+      {trackingEnabled&&(
+        <div style={{position:'fixed',top:'1rem',right:'1rem',background:'#10b981',color:'white',padding:'0.75rem 1.25rem',borderRadius:'2rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10001,display:'flex',gap:'0.75rem',alignItems:'center',fontSize:'0.875rem',fontWeight:'600'}}>
+          <div style={{width:'12px',height:'12px',background:'white',borderRadius:'50%',animation:'pulse 2s infinite'}}></div>
+          <span>GPS Active</span>
+        </div>
+      )}
+      <div style={{position:'absolute',top:0,left:0,right:0,bottom:0}}>
+        <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
+      </div>
+      <div style={{position:'fixed',bottom:'1rem',left:'1rem',background:'white',padding:'0.75rem 1rem',borderRadius:'0.75rem',boxShadow:'0 2px 8px rgba(0,0,0,0.1)',zIndex:998}}>
+        <div style={{fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>{currentUser.name}</div>
+        <button onClick={()=>trackingEnabled?stopLocationTracking():requestLocationPermission(currentUser)} style={{padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',fontSize:'0.75rem',cursor:'pointer',marginBottom:'0.5rem',width:'100%'}}>
+          {trackingEnabled?'Stop GPS':'Start GPS'}
+        </button>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.5rem'}}>
+          <button onClick={()=>setMode("drop-pin")} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:mode==="drop-pin"?'#2563eb':'#f1f5f9',color:mode==="drop-pin"?'white':'#475569',fontSize:'1.25rem',cursor:'pointer'}}>📍</button>
+          <button onClick={()=>setMode("draw-zone")} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:mode==="draw-zone"?'#2563eb':'#f1f5f9',color:mode==="draw-zone"?'white':'#475569',fontSize:'1.25rem',cursor:'pointer'}}>✏️</button>
+          <button onClick={()=>setMode("select")} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:mode==="select"?'#2563eb':'#f1f5f9',color:mode==="select"?'white':'#475569',fontSize:'1.25rem',cursor:'pointer'}}>👆</button>
+        </div>
+        {mode==="drop-pin"&&(
+          <div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.5rem'}}>
+              <button onClick={()=>setStatus("knocked")} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:status==="knocked"?'#16a34a':'white',color:status==="knocked"?'white':'#475569',fontSize:'1.25rem',cursor:'pointer'}}>✅</button>
+              <button onClick={()=>setStatus("flyer")} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:status==="flyer"?'#2563eb':'white',color:status==="flyer"?'white':'#475569',fontSize:'1.25rem',cursor:'pointer'}}>📬</button>
+              <button onClick={()=>setStatus("skipped")} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:status==="skipped"?'#ea580c':'white',color:status==="skipped"?'white':'#475569',fontSize:'1.25rem',cursor:'pointer'}}>⏭️</button>
+            </div>
+            <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note" style={{width:'100%',padding:'0.5rem',border:'1px solid #cbd5e1',borderRadius:'0.5rem',fontSize:'0.875rem'}}/>
+          </div>
+        )}
+        <div style={{fontSize:'0.75rem',color:'#64748b',marginTop:'0.5rem'}}>
+          ✅ {stats.verified} verified | 🚫 {stats.suspicious} suspicious<br/>
+          👥 {stats.onlineUsers} online
+        </div>
+      </div>
+      <button onClick={()=>setCurrentUser(null)} style={{position:'fixed',top:'1rem',left:'1rem',padding:'0.5rem 1rem',background:'white',border:'1px solid #e2e8f0',borderRadius:'0.5rem',cursor:'pointer',zIndex:999}}>Switch User</button>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('repzone-app')).render(<RepZoneApp />);
+</script>
+</body>
+</html>
+```
+
+4. Click **"Commit new file"** (green button at bottom)
+
+---
+
+### **Step 4: Get the RAW URL**
+
+1. Click on your **`repzone.html`** file
+2. Click the **"Raw"** button (top right)
+3. **Copy the URL** from your browser address bar
+
+It will look like:
+```
+https://raw.githubusercontent.com/YOUR-USERNAME/repzone-tracker/main/repzone.html
