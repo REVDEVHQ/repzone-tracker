@@ -14,6 +14,14 @@
   .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+  @keyframes progress {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
   .tracking-indicator { animation: pulse 2s infinite; }
   .tab { padding: 0.75rem 1rem; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; transition: all 0.2s; }
   .tab.active { border-bottom-color: #2563eb; color: #2563eb; }
@@ -212,6 +220,16 @@ function RepZoneApp() {
   const locationWatchId = useRef(null);
   const locationUpdateInterval = useRef(null);
 
+  // 🔒 SECURITY: Helper function to set current user context
+  async function setSupabaseUser(userId) {
+    if (!userId || !supabase.current) return;
+    try {
+      await supabase.current.rpc('set_current_user', { user_id: userId });
+    } catch (e) {
+      console.error('Error setting user context:', e);
+    }
+  }
+
   function showToast(message, duration = 4000) {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), duration);
@@ -295,12 +313,13 @@ function RepZoneApp() {
     }
     setTrackingEnabled(false);
     if (currentUser) {
-      supabase.current.from('live_locations').update({ is_active: false }).eq('team_member_id', currentUser.id).then(() => {});
+      updateLiveLocationInactive(currentUser.id);
     }
   }
 
   async function updateLiveLocation(userId, location) {
     try {
+      await setSupabaseUser(userId);
       await supabase.current.from('live_locations').upsert({
         team_member_id: userId,
         lat: location.lat,
@@ -310,6 +329,13 @@ function RepZoneApp() {
         is_active: true
       }, { onConflict: 'team_member_id' });
       loadLiveLocations();
+    } catch (e) {}
+  }
+
+  async function updateLiveLocationInactive(userId) {
+    try {
+      await setSupabaseUser(userId);
+      await supabase.current.from('live_locations').update({ is_active: false }).eq('team_member_id', userId);
     } catch (e) {}
   }
 
@@ -337,61 +363,125 @@ function RepZoneApp() {
 
   async function deletePin(pinId) {
     if (!confirm('Delete this pin?')) return;
-    await supabase.current.from('pins').delete().eq('id', pinId);
-    setPins(prev => prev.filter(p => p.id !== pinId));
-    showToast('Pin deleted!');
+    if (!currentUser) return;
+    
+    try {
+      await setSupabaseUser(currentUser.id);
+      await supabase.current.from('pins').delete().eq('id', pinId);
+      setPins(prev => prev.filter(p => p.id !== pinId));
+      showToast('Pin deleted!');
+    } catch (e) {
+      showToast('❌ Error deleting pin: ' + e.message);
+    }
   }
 
   async function updatePinStatus(pinId, newStatus) {
-    await supabase.current.from('pins').update({ status: newStatus }).eq('id', pinId);
-    setPins(prev => prev.map(p => p.id === pinId ? {...p, status: newStatus} : p));
-    showToast(`Updated to ${LEAD_TYPES[newStatus]?.label || newStatus}!`);
+    if (!currentUser) return;
+    
+    try {
+      await setSupabaseUser(currentUser.id);
+      await supabase.current.from('pins').update({ status: newStatus }).eq('id', pinId);
+      setPins(prev => prev.map(p => p.id === pinId ? {...p, status: newStatus} : p));
+      showToast(`Updated to ${LEAD_TYPES[newStatus]?.label || newStatus}!`);
+    } catch (e) {
+      showToast('❌ Error updating pin: ' + e.message);
+    }
   }
 
   async function deleteUser(userId) {
     if (!confirm('Delete this user? All their pins will remain.')) return;
-    await supabase.current.from('team_members').delete().eq('id', userId);
-    setTeamMembers(prev => prev.filter(u => u.id !== userId));
-    if (currentUser?.id === userId) setCurrentUser(null);
-    showToast('User deleted!');
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('⚠️ Only admins can delete users!');
+      return;
+    }
+    
+    try {
+      await setSupabaseUser(currentUser.id);
+      await supabase.current.from('team_members').delete().eq('id', userId);
+      setTeamMembers(prev => prev.filter(u => u.id !== userId));
+      if (currentUser?.id === userId) setCurrentUser(null);
+      showToast('User deleted!');
+    } catch (e) {
+      showToast('❌ Error deleting user: ' + e.message);
+    }
   }
 
   async function updateUserRole(userId, newRole) {
-    await supabase.current.from('team_members').update({ role: newRole }).eq('id', userId);
-    setTeamMembers(prev => prev.map(u => u.id === userId ? {...u, role: newRole} : u));
-    if (currentUser?.id === userId) {
-      const updatedUser = {...currentUser, role: newRole};
-      setCurrentUser(updatedUser);
-      localStorage.setItem('current_user_id', JSON.stringify(updatedUser));
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('⚠️ Only admins can change roles!');
+      return;
     }
-    setEditingUser(null);
-    showToast(`Role updated to ${newRole}!`);
+    
+    try {
+      await setSupabaseUser(currentUser.id);
+      await supabase.current.from('team_members').update({ role: newRole }).eq('id', userId);
+      setTeamMembers(prev => prev.map(u => u.id === userId ? {...u, role: newRole} : u));
+      if (currentUser?.id === userId) {
+        const updatedUser = {...currentUser, role: newRole};
+        setCurrentUser(updatedUser);
+        localStorage.setItem('current_user_id', JSON.stringify(updatedUser));
+      }
+      setEditingUser(null);
+      showToast(`Role updated to ${newRole}!`);
+    } catch (e) {
+      showToast('❌ Error updating role: ' + e.message);
+    }
   }
 
   async function assignZone(zoneId, userId) {
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('⚠️ Only admins can assign zones!');
+      return;
+    }
+    
     const member = teamMembers.find(m => m.id === userId);
-    await supabase.current.from('zones').update({ 
-      assigned_to: userId,
-      color: member?.color || COLORS[0]
-    }).eq('id', zoneId);
-    setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: userId, color: member?.color} : z));
-    setSelectedZone(null);
-    showToast(`Zone assigned to ${member.name}!`);
+    try {
+      await setSupabaseUser(currentUser.id);
+      await supabase.current.from('zones').update({ 
+        assigned_to: userId,
+        color: member?.color || COLORS[0]
+      }).eq('id', zoneId);
+      setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: userId, color: member?.color} : z));
+      setSelectedZone(null);
+      showToast(`Zone assigned to ${member.name}!`);
+    } catch (e) {
+      showToast('❌ Error assigning zone: ' + e.message);
+    }
   }
 
   async function unassignZone(zoneId) {
-    await supabase.current.from('zones').update({ assigned_to: null }).eq('id', zoneId);
-    setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: null} : z));
-    setSelectedZone(null);
-    showToast('Zone unassigned!');
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('⚠️ Only admins can unassign zones!');
+      return;
+    }
+    
+    try {
+      await setSupabaseUser(currentUser.id);
+      await supabase.current.from('zones').update({ assigned_to: null }).eq('id', zoneId);
+      setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: null} : z));
+      setSelectedZone(null);
+      showToast('Zone unassigned!');
+    } catch (e) {
+      showToast('❌ Error unassigning zone: ' + e.message);
+    }
   }
 
   async function deleteZone(zoneId) {
     if (!confirm('Delete this zone permanently?')) return;
-    await supabase.current.from('zones').delete().eq('id', zoneId);
-    setZones(prev => prev.filter(z => z.id !== zoneId));
-    setSelectedZone(null);
-    showToast('Zone deleted!');
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('⚠️ Only admins can delete zones!');
+      return;
+    }
+    
+    try {
+      await setSupabaseUser(currentUser.id);
+      await supabase.current.from('zones').delete().eq('id', zoneId);
+      setZones(prev => prev.filter(z => z.id !== zoneId));
+      setSelectedZone(null);
+      showToast('Zone deleted!');
+    } catch (e) {
+      showToast('❌ Error deleting zone: ' + e.message);
+    }
   }
 
   useEffect(() => {
@@ -401,10 +491,15 @@ function RepZoneApp() {
       delete window.deletePinGlobal;
       delete window.updatePinStatusGlobal;
     };
-  }, []);
+  }, [currentUser]);
 
   async function addTeamMember() {
     if (!newUserName.trim()) return;
+    if (!currentUser || currentUser.role !== 'admin') {
+      showToast('⚠️ Only admins can add team members!');
+      return;
+    }
+    
     const newMember = {
       id: `user-${Date.now()}`,
       name: newUserName,
@@ -412,12 +507,18 @@ function RepZoneApp() {
       role: newUserRole,
       created_at: new Date().toISOString()
     };
-    await supabase.current.from('team_members').insert([newMember]);
-    setTeamMembers(prev => [...prev, newMember]);
-    setNewUserName("");
-    setNewUserRole("rep");
-    setShowUserModal(false);
-    showToast(`${newUserName} added as ${newUserRole}!`);
+    
+    try {
+      await setSupabaseUser(currentUser.id);
+      await supabase.current.from('team_members').insert([newMember]);
+      setTeamMembers(prev => [...prev, newMember]);
+      setNewUserName("");
+      setNewUserRole("rep");
+      setShowUserModal(false);
+      showToast(`${newUserName} added as ${newUserRole}!`);
+    } catch (e) {
+      showToast('❌ Error adding team member: ' + e.message);
+    }
   }
 
   function selectCurrentUser(user) {
@@ -512,6 +613,7 @@ function RepZoneApp() {
             created_at: new Date().toISOString()
           };
           
+          await setSupabaseUser(currentUser.id);
           const { data, error } = await supabase.current.from('pins').insert([newPin]).select();
           
           if (error) {
@@ -543,24 +645,30 @@ function RepZoneApp() {
         const existing = zones.find(z => z.id === id);
         const newPoints = existing ? [...existing.points, [lat, lng]] : [[lat, lng]];
         
-        if (existing) {
-          await supabase.current.from('zones').update({ points: newPoints }).eq('id', id);
-          setZones(prev => prev.map(z => z.id === id ? {...z, points: newPoints} : z));
-        } else {
-          const newZone = {
-            id, 
-            name: `Zone ${zones.length + 1}`,
-            color: COLORS[zones.length % COLORS.length],
-            points: newPoints,
-            created_by: currentUser?.name || 'Admin',
-            assigned_to: null,
-            created_at: new Date().toISOString()
-          };
-          await supabase.current.from('zones').insert([newZone]);
-          setZones(prev => [...prev, newZone]);
-          showToast('Zone point added! Double-click to finish.');
+        try {
+          await setSupabaseUser(currentUser.id);
+          
+          if (existing) {
+            await supabase.current.from('zones').update({ points: newPoints }).eq('id', id);
+            setZones(prev => prev.map(z => z.id === id ? {...z, points: newPoints} : z));
+          } else {
+            const newZone = {
+              id, 
+              name: `Zone ${zones.length + 1}`,
+              color: COLORS[zones.length % COLORS.length],
+              points: newPoints,
+              created_by: currentUser?.name || 'Admin',
+              assigned_to: null,
+              created_at: new Date().toISOString()
+            };
+            await supabase.current.from('zones').insert([newZone]);
+            setZones(prev => [...prev, newZone]);
+            showToast('Zone point added! Double-click to finish.');
+          }
+          setActiveZoneId(id);
+        } catch (error) {
+          showToast('❌ Error creating zone: ' + error.message);
         }
-        setActiveZoneId(id);
       }
     };
 
@@ -716,9 +824,15 @@ function RepZoneApp() {
 
   if (loading) {
     return (
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:'1rem',background:'#f8fafc'}}>
-        <div className="spinner"></div>
-        <p style={{color:'#64748b',fontWeight:'500'}}>Loading RepZone...</p>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:'1.5rem',background:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}>
+        <div style={{fontSize:'5rem',animation:'bounce 1s infinite'}}>🏠</div>
+        <div>
+          <h1 style={{color:'white',fontSize:'2.5rem',fontWeight:'bold',marginBottom:'0.5rem',textAlign:'center'}}>RepZone</h1>
+          <p style={{color:'rgba(255,255,255,0.9)',fontSize:'1.125rem',textAlign:'center'}}>Loading your workspace...</p>
+        </div>
+        <div style={{width:'200px',height:'4px',background:'rgba(255,255,255,0.2)',borderRadius:'2px',overflow:'hidden'}}>
+          <div style={{width:'100%',height:'100%',background:'white',animation:'progress 1.5s ease-in-out infinite'}}></div>
+        </div>
       </div>
     );
   }
@@ -933,7 +1047,7 @@ function RepZoneApp() {
         </div>
       )}
 
-      {/* Modals - same as before */}
+      {/* Zone Selection Modal */}
       {selectedZone && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
           <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
@@ -992,6 +1106,7 @@ function RepZoneApp() {
         </div>
       )}
 
+      {/* User Selection Modal */}
       {!currentUser && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10000,padding:'1rem'}}>
           <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%',maxHeight:'80vh',overflowY:'auto'}}>
@@ -1026,6 +1141,7 @@ function RepZoneApp() {
         </div>
       )}
 
+      {/* Add Team Member Modal */}
       {showUserModal && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
           <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
@@ -1059,7 +1175,7 @@ function RepZoneApp() {
 
       {/* Layout */}
       <div style={{display:'flex',height:'100%',gap:isMobile?0:'1rem',padding:isMobile?0:'1rem'}}>
-        {/* Desktop Sidebar - Only visible on desktop */}
+        {/* Desktop Sidebar */}
         {!isMobile && (
           <div className="desktop-sidebar" style={{width:'400px',background:'white',borderRadius:'0.75rem',boxShadow:'0 4px 6px rgba(0,0,0,0.1)',flexDirection:'column',overflow:'hidden'}}>
             <div style={{padding:'1.5rem',borderBottom:'1px solid #e2e8f0'}}>
@@ -1152,7 +1268,7 @@ function RepZoneApp() {
           </div>
         )}
 
-        {/* Map - Full screen on mobile, flex on desktop */}
+        {/* Map */}
         <div style={{flex:1,borderRadius:isMobile?0:'0.75rem',overflow:'hidden',boxShadow:isMobile?'none':'0 4px 6px rgba(0,0,0,0.1)',position:'relative'}}>
           <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
         </div>
