@@ -29,7 +29,6 @@
   .toast { position: fixed; top: 5rem; right: 1rem; background: white; padding: 1rem 1.5rem; border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10001; animation: slideIn 0.3s ease; max-width: 400px; }
   @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   
-  /* Hamburger button - ONLY visible on mobile */
   .hamburger-btn {
     display: none;
     position: fixed;
@@ -69,7 +68,6 @@
     transform: rotate(-45deg) translate(6px, -6px);
   }
   
-  /* Dropdown panel - ONLY visible on mobile */
   .mobile-dropdown {
     display: none;
     position: fixed;
@@ -90,12 +88,10 @@
     -webkit-overflow-scrolling: touch;
   }
   
-  /* Desktop sidebar - ONLY visible on desktop */
   .desktop-sidebar {
     display: flex;
   }
   
-  /* Mobile-specific styles */
   @media (max-width: 768px) {
     .hamburger-btn {
       display: flex;
@@ -116,7 +112,6 @@
     }
   }
   
-  /* Desktop-specific styles */
   @media (min-width: 769px) {
     .hamburger-btn {
       display: none !important;
@@ -219,8 +214,13 @@ function RepZoneApp() {
   const supabase = useRef(null);
   const locationWatchId = useRef(null);
   const locationUpdateInterval = useRef(null);
+  
+  // 🚀 LAYERGROUPS - Separate layers for performance
+  const zoneLayerRef = useRef(null);
+  const pinLayerRef = useRef(null);
+  const liveLayerRef = useRef(null);
+  const userLocationLayerRef = useRef(null);
 
-  // 🔒 SECURITY: Helper function to set current user context
   async function setSupabaseUser(userId) {
     if (!userId || !supabase.current) return;
     try {
@@ -551,6 +551,7 @@ function RepZoneApp() {
     }).sort((a, b) => b.knockCount - a.knockCount);
   }
 
+  // 🚀 INITIALIZE MAP WITH LAYERGROUPS
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current || loading) return;
     
@@ -567,6 +568,12 @@ function RepZoneApp() {
     }).addTo(map);
 
     if (isMobile) L.control.zoom({ position: 'topright' }).addTo(map);
+
+    // 🚀 Create separate layer groups
+    zoneLayerRef.current = L.layerGroup().addTo(map);
+    pinLayerRef.current = L.layerGroup().addTo(map);
+    liveLayerRef.current = L.layerGroup().addTo(map);
+    userLocationLayerRef.current = L.layerGroup().addTo(map);
 
     mapInstanceRef.current = map;
     
@@ -684,15 +691,11 @@ function RepZoneApp() {
     return () => map.off('click', handleClick);
   }, [mode, status, note, activeZoneId, zones, mapReady, currentUser, currentLocation, teamMembers]);
 
+  // 🚀 RENDER ZONES (only when zones/mode changes)
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !mapReady) return;
-
-    map.eachLayer(layer => {
-      if (layer instanceof L.Polygon || layer instanceof L.Marker || layer instanceof L.Circle) {
-        map.removeLayer(layer);
-      }
-    });
+    if (!mapReady || !zoneLayerRef.current) return;
+    
+    zoneLayerRef.current.clearLayers();
 
     zones.forEach(zone => {
       if (zone.points?.length >= 3) {
@@ -704,7 +707,9 @@ function RepZoneApp() {
           weight: 3,
           interactive: mode !== "drop-pin",
           bubblingMouseEvents: true
-        }).addTo(map);
+        });
+
+        polygon.addTo(zoneLayerRef.current);
 
         if (mode === "select") {
           polygon.on('click', (e) => {
@@ -722,56 +727,13 @@ function RepZoneApp() {
         `);
       }
     });
+  }, [zones, teamMembers, mode, mapReady]);
 
-    if (showLiveTracking) {
-      liveLocations.forEach(loc => {
-        const member = teamMembers.find(m => m.id === loc.team_member_id);
-        if (!member || loc.team_member_id === currentUser?.id) return;
-
-        const minutesAgo = Math.floor((Date.now() - new Date(loc.last_updated)) / 60000);
-        const isRecent = minutesAgo < 5;
-
-        L.circle([loc.lat, loc.lng], {
-          radius: 30,
-          color: member.color,
-          fillColor: member.color,
-          fillOpacity: isRecent ? 0.4 : 0.2,
-          weight: 3,
-          className: isRecent ? 'tracking-indicator' : ''
-        }).addTo(map);
-
-        const liveIcon = L.divIcon({
-          html: `<div style="background:${member.color};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;border:4px solid white;box-shadow:0 2px 12px rgba(0,0,0,0.3);position:relative">${member.name.charAt(0)}${isRecent ? `<div style="position:absolute;top:-4px;right:-4px;width:12px;height:12px;background:#10b981;border:2px solid white;border-radius:50%"></div>` : ''}</div>`,
-          iconSize: [40, 40],
-          iconAnchor: [20, 20]
-        });
-
-        L.marker([loc.lat, loc.lng], { icon: liveIcon })
-          .addTo(map)
-          .bindPopup(`<b>${member.name}</b><br><small>${minutesAgo} min ago</small>`);
-      });
-    }
-
-    if (currentLocation && currentUser) {
-      L.circle([currentLocation.lat, currentLocation.lng], {
-        radius: 50,
-        color: currentUser.color,
-        fillColor: currentUser.color,
-        fillOpacity: 0.3,
-        weight: 2,
-        className: 'tracking-indicator'
-      }).addTo(map);
-
-      const youIcon = L.divIcon({
-        html: `<div style="background:${currentUser.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.4);position:relative">${currentUser.name.charAt(0)}<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;background:#10b981;border:3px solid white;border-radius:50%;animation:pulse 2s infinite"></div></div>`,
-        iconSize: [48, 48],
-        iconAnchor: [24, 24]
-      });
-
-      L.marker([currentLocation.lat, currentLocation.lng], { icon: youIcon })
-        .addTo(map)
-        .bindPopup(`<div style="padding:8px;text-align:center"><b style="color:${currentUser.color};font-size:1.125rem">📍 You Are Here</b><br><small style="color:#64748b">GPS Tracking Active</small></div>`);
-    }
+  // 🚀 RENDER PINS (only when pins/filter changes)
+  useEffect(() => {
+    if (!mapReady || !pinLayerRef.current) return;
+    
+    pinLayerRef.current.clearLayers();
 
     const filtered = pins.filter(p => {
       if (filter.status !== "all" && p.status !== filter.status) return false;
@@ -790,7 +752,8 @@ function RepZoneApp() {
         iconAnchor: [18, 36]
       });
       
-      const marker = L.marker([pin.lat, pin.lng], { icon }).addTo(map);
+      const marker = L.marker([pin.lat, pin.lng], { icon });
+      marker.addTo(pinLayerRef.current);
       
       marker.bindPopup(`
         <div style="min-width:200px;padding:12px">
@@ -820,7 +783,73 @@ function RepZoneApp() {
         </div>
       `);
     });
-  }, [pins, zones, filter, mapReady, teamMembers, liveLocations, currentLocation, currentUser, showLiveTracking, mode]);
+  }, [pins, filter, teamMembers, mapReady]);
+
+  // 🚀 RENDER LIVE LOCATIONS (only when live locations change)
+  useEffect(() => {
+    if (!mapReady || !liveLayerRef.current || !showLiveTracking) return;
+    
+    liveLayerRef.current.clearLayers();
+
+    liveLocations.forEach(loc => {
+      const member = teamMembers.find(m => m.id === loc.team_member_id);
+      if (!member || loc.team_member_id === currentUser?.id) return;
+
+      const minutesAgo = Math.floor((Date.now() - new Date(loc.last_updated)) / 60000);
+      const isRecent = minutesAgo < 5;
+
+      const circle = L.circle([loc.lat, loc.lng], {
+        radius: 30,
+        color: member.color,
+        fillColor: member.color,
+        fillOpacity: isRecent ? 0.4 : 0.2,
+        weight: 3,
+        className: isRecent ? 'tracking-indicator' : ''
+      });
+
+      circle.addTo(liveLayerRef.current);
+
+      const liveIcon = L.divIcon({
+        html: `<div style="background:${member.color};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;border:4px solid white;box-shadow:0 2px 12px rgba(0,0,0,0.3);position:relative">${member.name.charAt(0)}${isRecent ? `<div style="position:absolute;top:-4px;right:-4px;width:12px;height:12px;background:#10b981;border:2px solid white;border-radius:50%"></div>` : ''}</div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+      });
+
+      const marker = L.marker([loc.lat, loc.lng], { icon: liveIcon });
+      marker.addTo(liveLayerRef.current);
+      marker.bindPopup(`<b>${member.name}</b><br><small>${minutesAgo} min ago</small>`);
+    });
+  }, [liveLocations, teamMembers, currentUser, showLiveTracking, mapReady]);
+
+  // 🚀 RENDER USER LOCATION (only when current location changes)
+  useEffect(() => {
+    if (!mapReady || !userLocationLayerRef.current) return;
+    
+    userLocationLayerRef.current.clearLayers();
+
+    if (currentLocation && currentUser) {
+      const circle = L.circle([currentLocation.lat, currentLocation.lng], {
+        radius: 50,
+        color: currentUser.color,
+        fillColor: currentUser.color,
+        fillOpacity: 0.3,
+        weight: 2,
+        className: 'tracking-indicator'
+      });
+
+      circle.addTo(userLocationLayerRef.current);
+
+      const youIcon = L.divIcon({
+        html: `<div style="background:${currentUser.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.4);position:relative">${currentUser.name.charAt(0)}<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;background:#10b981;border:3px solid white;border-radius:50%;animation:pulse 2s infinite"></div></div>`,
+        iconSize: [48, 48],
+        iconAnchor: [24, 24]
+      });
+
+      const marker = L.marker([currentLocation.lat, currentLocation.lng], { icon: youIcon });
+      marker.addTo(userLocationLayerRef.current);
+      marker.bindPopup(`<div style="padding:8px;text-align:center"><b style="color:${currentUser.color};font-size:1.125rem">📍 You Are Here</b><br><small style="color:#64748b">GPS Tracking Active</small></div>`);
+    }
+  }, [currentLocation, currentUser, mapReady]);
 
   if (loading) {
     return (
@@ -951,7 +980,6 @@ function RepZoneApp() {
     </div>
   );
 
-  // Mobile Dropdown Content
   const MobileDropdownContent = () => (
     <div style={{padding:'1rem',paddingTop:'5rem'}}>
       {currentUser && (
@@ -1047,7 +1075,6 @@ function RepZoneApp() {
         </div>
       )}
 
-      {/* Zone Selection Modal */}
       {selectedZone && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
           <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
@@ -1106,7 +1133,6 @@ function RepZoneApp() {
         </div>
       )}
 
-      {/* User Selection Modal */}
       {!currentUser && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10000,padding:'1rem'}}>
           <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%',maxHeight:'80vh',overflowY:'auto'}}>
@@ -1141,7 +1167,6 @@ function RepZoneApp() {
         </div>
       )}
 
-      {/* Add Team Member Modal */}
       {showUserModal && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
           <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
@@ -1159,7 +1184,6 @@ function RepZoneApp() {
         </div>
       )}
 
-      {/* Mobile: Hamburger + Dropdown */}
       {isMobile && (
         <>
           <button className={`hamburger-btn ${mobileMenuOpen ? 'open' : ''}`} onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -1173,9 +1197,7 @@ function RepZoneApp() {
         </>
       )}
 
-      {/* Layout */}
       <div style={{display:'flex',height:'100%',gap:isMobile?0:'1rem',padding:isMobile?0:'1rem'}}>
-        {/* Desktop Sidebar */}
         {!isMobile && (
           <div className="desktop-sidebar" style={{width:'400px',background:'white',borderRadius:'0.75rem',boxShadow:'0 4px 6px rgba(0,0,0,0.1)',flexDirection:'column',overflow:'hidden'}}>
             <div style={{padding:'1.5rem',borderBottom:'1px solid #e2e8f0'}}>
@@ -1268,7 +1290,6 @@ function RepZoneApp() {
           </div>
         )}
 
-        {/* Map */}
         <div style={{flex:1,borderRadius:isMobile?0:'0.75rem',overflow:'hidden',boxShadow:isMobile?'none':'0 4px 6px rgba(0,0,0,0.1)',position:'relative'}}>
           <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
         </div>
