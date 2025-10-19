@@ -36,6 +36,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const COLORS = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 
+// LEAD TYPES - A, B, C + Old ones
+const LEAD_TYPES = {
+  estimate: { icon: '💰', label: 'A - Estimate', color: '#10b981', display: 'A' },
+  callback: { icon: '📞', label: 'B - Callback 1-2 Weeks', color: '#f59e0b', display: 'B' },
+  notinterested: { icon: '📋', label: 'C - Not Interested (Has Info)', color: '#64748b', display: 'C' },
+  knocked: { icon: '✅', label: 'Knocked', color: '#16a34a', display: '✅' },
+  flyer: { icon: '📬', label: 'Flyer', color: '#2563eb', display: '📬' },
+  skipped: { icon: '⏭️', label: 'Skipped', color: '#ef4444', display: '⏭️' }
+};
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
@@ -72,7 +82,7 @@ function RepZoneApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [mode, setMode] = useState("drop-pin");
-  const [status, setStatus] = useState("knocked");
+  const [status, setStatus] = useState("estimate");
   const [activeZoneId, setActiveZoneId] = useState(null);
   const [note, setNote] = useState("");
   const [filter, setFilter] = useState({ status: "all", userId: "all" });
@@ -231,6 +241,11 @@ function RepZoneApp() {
   async function updateUserRole(userId, newRole) {
     await supabase.current.from('team_members').update({ role: newRole }).eq('id', userId);
     setTeamMembers(prev => prev.map(u => u.id === userId ? {...u, role: newRole} : u));
+    if (currentUser?.id === userId) {
+      const updatedUser = {...currentUser, role: newRole};
+      setCurrentUser(updatedUser);
+      localStorage.setItem('current_user_id', JSON.stringify(updatedUser));
+    }
     setEditingUser(null);
   }
 
@@ -278,9 +293,9 @@ function RepZoneApp() {
       const dayPins = memberPins.filter(p => new Date(p.created_at) >= startOfDay);
       
       let count = 0;
-      if (leaderboardPeriod === 'week') count = weekPins.filter(p => p.status === 'knocked').length;
-      else if (leaderboardPeriod === 'day') count = dayPins.filter(p => p.status === 'knocked').length;
-      else count = memberPins.filter(p => p.status === 'knocked').length;
+      if (leaderboardPeriod === 'week') count = weekPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
+      else if (leaderboardPeriod === 'day') count = dayPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
+      else count = memberPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
 
       const liveLocation = liveLocations.find(l => l.team_member_id === member.id);
       const isOnline = liveLocation && new Date(liveLocation.last_updated) > new Date(Date.now() - 5 * 60 * 1000);
@@ -320,23 +335,25 @@ function RepZoneApp() {
       const { lat, lng } = e.latlng;
       
       if (mode === "drop-pin" && currentUser) {
-        // Find zone user clicked in
+        // FIXED ZONE LOGIC - Super simple now
         const clickedZone = zones.find(z => {
           if (!z.points || z.points.length < 3) return false;
           return isPointInPolygon([lat, lng], z.points);
         });
 
-        // FIXED: Allow if user is ADMIN OR zone is assigned to them OR zone is unassigned
-        if (clickedZone && clickedZone.assigned_to) {
+        // Check if zone is assigned to someone else
+        if (clickedZone?.assigned_to) {
+          // If user is NOT admin AND zone is NOT theirs, block it
           if (currentUser.role !== 'admin' && clickedZone.assigned_to !== currentUser.id) {
             const assignedUser = teamMembers.find(u => u.id === clickedZone.assigned_to);
-            alert(`⚠️ This zone "${clickedZone.name}" is assigned to ${assignedUser?.name}. Only admins or ${assignedUser?.name} can drop pins here.`);
-            return;
+            alert(`⚠️ This zone is assigned to ${assignedUser?.name || 'another user'}.\n\nOnly ${assignedUser?.name || 'that user'} or admins can drop pins here.`);
+            return; // Block the pin drop
           }
         }
+        // If we get here, user is allowed to drop pin
 
         if (!currentLocation) {
-          alert('Enable location services first!');
+          alert('⚠️ Enable GPS tracking first to verify your location!');
           return;
         }
 
@@ -364,7 +381,7 @@ function RepZoneApp() {
         setSaving(false);
 
         if (verification.status === 'suspicious') {
-          alert(`⚠️ You are ${Math.round(distance)} feet away!`);
+          alert(`⚠️ Warning: You are ${Math.round(distance)} feet from the pin location!`);
         }
       } else if (mode === "draw-zone") {
         const id = activeZoneId || `zone-${Date.now()}`;
@@ -474,11 +491,11 @@ function RepZoneApp() {
 
     filtered.forEach(pin => {
       const user = teamMembers.find(u => u.id === pin.team_member_id);
-      const icons = { knocked: "✅", flyer: "📬", skipped: "⏭️" };
+      const leadType = LEAD_TYPES[pin.status] || LEAD_TYPES.knocked;
       const verification = pin.verification_status ? getVerificationStatus(pin.distance_from_pin || 0) : null;
       
       const icon = L.divIcon({
-        html: `<div style="background:${user?.color || '#64748b'};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid ${verification ? verification.color : 'white'};box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative">${icons[pin.status]}${verification ? `<div style="position:absolute;top:-8px;right:-8px;background:${verification.color};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white">${verification.icon}</div>` : ''}</div>`,
+        html: `<div style="background:${user?.color || '#64748b'};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid ${verification ? verification.color : 'white'};box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative">${leadType.display}${verification ? `<div style="position:absolute;top:-8px;right:-8px;background:${verification.color};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white">${verification.icon}</div>` : ''}</div>`,
         iconSize: [36, 36],
         iconAnchor: [18, 36]
       });
@@ -487,14 +504,19 @@ function RepZoneApp() {
       
       marker.bindPopup(`
         <div style="min-width:200px;padding:12px">
-          <b>${icons[pin.status]} ${pin.status.toUpperCase()}</b><br>
-          👤 ${pin.rep_name || 'Unknown'}<br>
-          ${pin.note ? `📝 ${pin.note}<br>` : ''}
-          ${verification ? `<b style="color:${verification.color}">${verification.icon} ${pin.distance_from_pin}ft</b><br>` : ''}
-          <small>${new Date(pin.created_at).toLocaleString()}</small><br>
-          <button onclick="window.updatePinStatusGlobal('${pin.id}','knocked')" style="padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;cursor:pointer;margin:4px">✅</button>
-          <button onclick="window.updatePinStatusGlobal('${pin.id}','flyer')" style="padding:8px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;margin:4px">📬</button>
-          <button onclick="window.deletePinGlobal('${pin.id}')" style="width:100%;margin-top:8px;padding:8px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer">🗑️</button>
+          <div style="font-size:18px;margin-bottom:8px">${leadType.icon} <b>${leadType.label}</b></div>
+          <div style="padding:8px;background:${user?.color || '#64748b'}22;border-left:3px solid ${user?.color || '#64748b'};margin-bottom:8px">
+            <b>👤 ${pin.rep_name || 'Unknown'}</b>
+          </div>
+          ${pin.note ? `<div style="font-size:13px;margin-bottom:8px">📝 ${pin.note}</div>` : ''}
+          ${verification ? `<div style="padding:8px;background:${verification.color}22;border-left:3px solid ${verification.color};margin-bottom:8px"><b style="color:${verification.color}">${verification.icon} ${pin.distance_from_pin}ft</b></div>` : ''}
+          <small style="color:#64748b">${new Date(pin.created_at).toLocaleString()}</small><br>
+          <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">
+            ${Object.entries(LEAD_TYPES).map(([key, type]) => `
+              <button onclick="window.updatePinStatusGlobal('${pin.id}','${key}')" style="flex:1;min-width:40px;padding:6px;background:${type.color};color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px">${type.display}</button>
+            `).join('')}
+          </div>
+          <button onclick="window.deletePinGlobal('${pin.id}')" style="width:100%;margin-top:8px;padding:8px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600">🗑️ Delete</button>
         </div>
       `);
     });
@@ -511,8 +533,10 @@ function RepZoneApp() {
 
   const stats = {
     totalPins: pins.length,
+    estimates: pins.filter(p => p.status === 'estimate').length,
+    callbacks: pins.filter(p => p.status === 'callback').length,
+    notinterested: pins.filter(p => p.status === 'notinterested').length,
     knocked: pins.filter(p => p.status === 'knocked').length,
-    flyers: pins.filter(p => p.status === 'flyer').length,
     verified: pins.filter(p => p.verification_status === 'verified').length,
     suspicious: pins.filter(p => p.verification_status === 'suspicious').length,
     onlineUsers: liveLocations.filter(l => new Date(l.last_updated) > new Date(Date.now() - 5 * 60 * 1000)).length
@@ -544,7 +568,7 @@ function RepZoneApp() {
             </div>
             <div style={{flex:1}}>
               <div style={{fontWeight:'bold',fontSize:'1.125rem',marginBottom:'0.25rem'}}>{member.name}</div>
-              <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.knockCount} doors knocked</div>
+              <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.knockCount} leads</div>
             </div>
             <div style={{fontSize:'2.5rem',fontWeight:'bold',color:member.color}}>{member.knockCount}</div>
           </div>
@@ -680,23 +704,24 @@ function RepZoneApp() {
 
                 {mode === "drop-pin" && (
                   <div style={{padding:'1rem',background:'#dbeafe',borderRadius:'0.75rem',marginBottom:'1rem'}}>
-                    <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.75rem'}}>Pin Status</label>
+                    <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.75rem'}}>Lead Type</label>
                     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
-                      {[['knocked','✅','#16a34a'],['flyer','📬','#2563eb'],['skipped','⏭️','#ea580c']].map(([s,icon,color]) => (
-                        <button key={s} onClick={()=>setStatus(s)} style={{padding:'1rem',borderRadius:'0.5rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#475569',fontSize:'1.5rem',cursor:'pointer'}}>
-                          {icon}
+                      {[['estimate','💰','A','#10b981'],['callback','📞','B','#f59e0b'],['notinterested','📋','C','#64748b']].map(([s,icon,display,color]) => (
+                        <button key={s} onClick={()=>setStatus(s)} style={{padding:'0.75rem',borderRadius:'0.5rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#475569',fontSize:'1.25rem',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem'}}>
+                          <div>{icon}</div>
+                          <div style={{fontSize:'0.75rem',fontWeight:'600'}}>{display}</div>
                         </button>
                       ))}
                     </div>
-                    <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note" style={{width:'100%',padding:'0.75rem',border:'2px solid #93c5fd',borderRadius:'0.5rem',fontSize:'0.875rem'}} />
+                    <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, etc.)" style={{width:'100%',padding:'0.75rem',border:'2px solid #93c5fd',borderRadius:'0.5rem',fontSize:'0.875rem'}} />
                   </div>
                 )}
 
                 <div style={{padding:'1rem',background:'#f8fafc',borderRadius:'0.75rem'}}>
                   <h3 style={{fontSize:'1rem',fontWeight:'600',marginBottom:'0.75rem'}}>Stats</h3>
                   <div style={{fontSize:'0.875rem',color:'#64748b'}}>
+                    💰 {stats.estimates} estimates | 📞 {stats.callbacks} callbacks<br/>
                     ✅ {stats.verified} verified | 🚫 {stats.suspicious} suspicious<br/>
-                    📍 {stats.totalPins} total pins<br/>
                     👥 {stats.onlineUsers} online
                   </div>
                 </div>
