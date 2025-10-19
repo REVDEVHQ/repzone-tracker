@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RepZone Pro</title>
+<title>RepZone Tracker</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; width: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
+  html, body { height: 100%; width: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .leaflet-container { height: 100% !important; width: 100% !important; }
   .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -36,15 +36,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const COLORS = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 
-const LEAD_TYPES = {
-  estimate: { icon: '💰', label: 'A - Estimate', color: '#10b981', shortLabel: 'A' },
-  callback: { icon: '📞', label: 'B - Callback 1-2 Weeks', color: '#f59e0b', shortLabel: 'B' },
-  notinterested: { icon: '📋', label: 'C - Not Interested (Has Info)', color: '#64748b', shortLabel: 'C' },
-  knocked: { icon: '✅', label: 'Knocked', color: '#16a34a', shortLabel: '✅' },
-  flyer: { icon: '📬', label: 'Flyer', color: '#2563eb', shortLabel: '📬' },
-  skipped: { icon: '⏭️', label: 'Skipped', color: '#ef4444', shortLabel: '⏭️' }
-};
-
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
@@ -57,9 +48,9 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 function getVerificationStatus(distance) {
-  if (distance <= 50) return { status: 'verified', color: '#10b981', icon: '✅', label: 'Verified' };
-  if (distance <= 150) return { status: 'questionable', color: '#f59e0b', icon: '⚠️', label: 'Questionable' };
-  return { status: 'suspicious', color: '#ef4444', icon: '🚫', label: 'Suspicious' };
+  if (distance <= 50) return { status: 'verified', color: '#10b981', icon: '✅' };
+  if (distance <= 150) return { status: 'questionable', color: '#f59e0b', icon: '⚠️' };
+  return { status: 'suspicious', color: '#ef4444', icon: '🚫' };
 }
 
 function isPointInPolygon(point, polygon) {
@@ -81,9 +72,8 @@ function RepZoneApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [mode, setMode] = useState("drop-pin");
-  const [status, setStatus] = useState("estimate");
+  const [status, setStatus] = useState("knocked");
   const [activeZoneId, setActiveZoneId] = useState(null);
-  const [selectedZoneForAssignment, setSelectedZoneForAssignment] = useState(null);
   const [note, setNote] = useState("");
   const [filter, setFilter] = useState({ status: "all", userId: "all" });
   const [activeTab, setActiveTab] = useState("map");
@@ -91,9 +81,9 @@ function RepZoneApp() {
   const [saving, setSaving] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [showUserManagement, setShowUserManagement] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [newUserName, setNewUserName] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [newUserRole, setNewUserRole] = useState("rep");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [leaderboardPeriod, setLeaderboardPeriod] = useState('week');
   const [trackingEnabled, setTrackingEnabled] = useState(false);
@@ -138,19 +128,14 @@ function RepZoneApp() {
         .gte('last_updated', fiveMinutesAgo)
         .eq('is_active', true);
       if (!error && data) setLiveLocations(data);
-    } catch (e) {
-      console.error('Error loading live locations:', e);
-    }
+    } catch (e) {}
   }
 
   async function requestLocationPermission(user) {
-    if (!navigator.geolocation) {
-      alert('Geolocation is not supported');
-      return;
-    }
+    if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       () => startLocationTracking(user),
-      (error) => console.error('Location permission denied:', error)
+      () => {}
     );
   }
 
@@ -159,20 +144,17 @@ function RepZoneApp() {
     setTrackingEnabled(true);
     locationWatchId.current = navigator.geolocation.watchPosition(
       (position) => {
-        const newLocation = {
+        setCurrentLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy
-        };
-        setCurrentLocation(newLocation);
+        });
       },
-      (error) => console.error('Tracking error:', error),
+      () => {},
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
     );
     locationUpdateInterval.current = setInterval(() => {
-      if (currentLocation && user) {
-        updateLiveLocation(user.id, currentLocation);
-      }
+      if (currentLocation && user) updateLiveLocation(user.id, currentLocation);
     }, 30000);
   }
 
@@ -187,17 +169,13 @@ function RepZoneApp() {
     }
     setTrackingEnabled(false);
     if (currentUser) {
-      supabase.current
-        .from('live_locations')
-        .update({ is_active: false })
-        .eq('team_member_id', currentUser.id)
-        .then(() => {});
+      supabase.current.from('live_locations').update({ is_active: false }).eq('team_member_id', currentUser.id).then(() => {});
     }
   }
 
   async function updateLiveLocation(userId, location) {
     try {
-      const locationData = {
+      await supabase.current.from('live_locations').upsert({
         id: `loc-${userId}-${Date.now()}`,
         team_member_id: userId,
         lat: location.lat,
@@ -205,14 +183,9 @@ function RepZoneApp() {
         accuracy: location.accuracy,
         last_updated: new Date().toISOString(),
         is_active: true
-      };
-      await supabase.current
-        .from('live_locations')
-        .upsert(locationData, { onConflict: 'team_member_id' });
+      }, { onConflict: 'team_member_id' });
       loadLiveLocations();
-    } catch (e) {
-      console.error('Error updating location:', e);
-    }
+    } catch (e) {}
   }
 
   useEffect(() => {
@@ -221,9 +194,7 @@ function RepZoneApp() {
     }
   }, [currentLocation, currentUser, trackingEnabled]);
 
-  useEffect(() => {
-    return () => stopLocationTracking();
-  }, []);
+  useEffect(() => () => stopLocationTracking(), []);
 
   async function loadData() {
     try {
@@ -235,14 +206,12 @@ function RepZoneApp() {
       setPins(pinsRes.data || []);
       setZones(zonesRes.data || []);
       setTeamMembers(teamRes.data || []);
-    } catch (e) {
-      console.error('Load error:', e);
-    }
+    } catch (e) {}
     setLoading(false);
   }
 
   async function deletePin(pinId) {
-    if (!confirm('Delete this pin?')) return;
+    if (!confirm('Delete?')) return;
     await supabase.current.from('pins').delete().eq('id', pinId);
     setPins(prev => prev.filter(p => p.id !== pinId));
   }
@@ -253,22 +222,16 @@ function RepZoneApp() {
   }
 
   async function deleteUser(userId) {
-    if (!confirm('Delete this user? All their pins will remain but be unassigned.')) return;
+    if (!confirm('Delete this user?')) return;
     await supabase.current.from('team_members').delete().eq('id', userId);
     setTeamMembers(prev => prev.filter(u => u.id !== userId));
-    if (currentUser?.id === userId) {
-      setCurrentUser(null);
-    }
+    if (currentUser?.id === userId) setCurrentUser(null);
   }
 
-  async function assignZoneToUser(zoneId, userId) {
-    const member = teamMembers.find(m => m.id === userId);
-    await supabase.current.from('zones').update({ 
-      assigned_to: userId,
-      color: member?.color || COLORS[0]
-    }).eq('id', zoneId);
-    setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: userId, color: member?.color} : z));
-    setSelectedZoneForAssignment(null);
+  async function updateUserRole(userId, newRole) {
+    await supabase.current.from('team_members').update({ role: newRole }).eq('id', userId);
+    setTeamMembers(prev => prev.map(u => u.id === userId ? {...u, role: newRole} : u));
+    setEditingUser(null);
   }
 
   useEffect(() => {
@@ -286,12 +249,13 @@ function RepZoneApp() {
       id: `user-${Date.now()}`,
       name: newUserName,
       color: COLORS[teamMembers.length % COLORS.length],
-      role: 'rep',
+      role: newUserRole,
       created_at: new Date().toISOString()
     };
     await supabase.current.from('team_members').insert([newMember]);
     setTeamMembers(prev => [...prev, newMember]);
     setNewUserName("");
+    setNewUserRole("rep");
     setShowUserModal(false);
   }
 
@@ -314,9 +278,9 @@ function RepZoneApp() {
       const dayPins = memberPins.filter(p => new Date(p.created_at) >= startOfDay);
       
       let count = 0;
-      if (leaderboardPeriod === 'week') count = weekPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
-      else if (leaderboardPeriod === 'day') count = dayPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
-      else count = memberPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
+      if (leaderboardPeriod === 'week') count = weekPins.filter(p => p.status === 'knocked').length;
+      else if (leaderboardPeriod === 'day') count = dayPins.filter(p => p.status === 'knocked').length;
+      else count = memberPins.filter(p => p.status === 'knocked').length;
 
       const liveLocation = liveLocations.find(l => l.team_member_id === member.id);
       const isOnline = liveLocation && new Date(liveLocation.last_updated) > new Date(Date.now() - 5 * 60 * 1000);
@@ -325,7 +289,6 @@ function RepZoneApp() {
     }).sort((a, b) => b.knockCount - a.knockCount);
   }
 
-  // Map initialization
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current || loading) return;
     
@@ -339,9 +302,7 @@ function RepZoneApp() {
       attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    if (isMobile) {
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-    }
+    if (isMobile) L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     mapInstanceRef.current = map;
     
@@ -351,7 +312,6 @@ function RepZoneApp() {
     }, 300);
   }, [loading, isMobile]);
 
-  // Map click handlers
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !mapReady) return;
@@ -360,20 +320,23 @@ function RepZoneApp() {
       const { lat, lng } = e.latlng;
       
       if (mode === "drop-pin" && currentUser) {
-        // Check if clicking in assigned zone
+        // Find zone user clicked in
         const clickedZone = zones.find(z => {
           if (!z.points || z.points.length < 3) return false;
           return isPointInPolygon([lat, lng], z.points);
         });
 
-        if (clickedZone && clickedZone.assigned_to && clickedZone.assigned_to !== currentUser.id) {
-          const assignedUser = teamMembers.find(u => u.id === clickedZone.assigned_to);
-          alert(`⚠️ This zone "${clickedZone.name}" is assigned to ${assignedUser?.name}. You can only drop pins in your assigned zones or unassigned areas.`);
-          return;
+        // FIXED: Allow if user is ADMIN OR zone is assigned to them OR zone is unassigned
+        if (clickedZone && clickedZone.assigned_to) {
+          if (currentUser.role !== 'admin' && clickedZone.assigned_to !== currentUser.id) {
+            const assignedUser = teamMembers.find(u => u.id === clickedZone.assigned_to);
+            alert(`⚠️ This zone "${clickedZone.name}" is assigned to ${assignedUser?.name}. Only admins or ${assignedUser?.name} can drop pins here.`);
+            return;
+          }
         }
 
         if (!currentLocation) {
-          alert('Unable to verify location. Please enable location services.');
+          alert('Enable location services first!');
           return;
         }
 
@@ -401,7 +364,7 @@ function RepZoneApp() {
         setSaving(false);
 
         if (verification.status === 'suspicious') {
-          alert(`⚠️ Warning: You are ${Math.round(distance)} feet away from this location. This pin has been flagged as suspicious.`);
+          alert(`⚠️ You are ${Math.round(distance)} feet away!`);
         }
       } else if (mode === "draw-zone") {
         const id = activeZoneId || `zone-${Date.now()}`;
@@ -439,7 +402,6 @@ function RepZoneApp() {
     return () => map.off('click', handleClick);
   }, [mode, status, note, activeZoneId, zones, mapReady, currentUser, currentLocation, teamMembers]);
 
-  // Render map layers
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !mapReady) return;
@@ -450,63 +412,41 @@ function RepZoneApp() {
       }
     });
 
-    // Draw zones
     zones.forEach(zone => {
       if (zone.points?.length >= 3) {
         const assigned = teamMembers.find(u => u.id === zone.assigned_to);
-        const polygon = L.polygon(zone.points, {
+        L.polygon(zone.points, {
           color: assigned?.color || zone.color,
           fillColor: assigned?.color || zone.color,
           fillOpacity: 0.2,
           weight: 3
-        }).addTo(map);
-
-        polygon.on('click', () => {
-          if (mode === "select") {
-            setSelectedZoneForAssignment(zone);
-          }
-        });
-
-        polygon.bindPopup(`
-          <div style="padding:8px;min-width:150px">
-            <b style="font-size:16px">${zone.name}</b><br>
-            ${assigned ? `<span style="color:${assigned.color}">👤 ${assigned.name}</span>` : '⚠️ Unassigned'}
-            ${mode === "select" ? '<br><small style="color:#64748b">Click to assign</small>' : ''}
-          </div>
-        `);
+        }).addTo(map).bindPopup(`<b>${zone.name}</b><br>${assigned ? `👤 ${assigned.name}` : '⚠️ Unassigned'}`);
       }
     });
 
-    // Draw live locations
     if (showLiveTracking) {
       liveLocations.forEach(loc => {
         const member = teamMembers.find(m => m.id === loc.team_member_id);
         if (!member || loc.team_member_id === currentUser?.id) return;
 
-        const minutesAgo = Math.floor((Date.now() - new Date(loc.last_updated)) / 60000);
-        const isRecent = minutesAgo < 5;
-
         L.circle([loc.lat, loc.lng], {
           radius: 30,
           color: member.color,
           fillColor: member.color,
-          fillOpacity: isRecent ? 0.4 : 0.2,
-          weight: 3,
-          className: isRecent ? 'tracking-indicator' : ''
+          fillOpacity: 0.3,
+          weight: 3
         }).addTo(map);
 
         const liveIcon = L.divIcon({
-          html: `<div style="background:${member.color};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.125rem;border:4px solid white;box-shadow:0 2px 12px rgba(0,0,0,0.3);position:relative">${member.name.charAt(0)}${isRecent ? `<div style="position:absolute;top:-4px;right:-4px;width:12px;height:12px;background:#10b981;border:2px solid white;border-radius:50%"></div>` : ''}</div>`,
+          html: `<div style="background:${member.color};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;border:4px solid white;box-shadow:0 2px 12px rgba(0,0,0,0.3)">${member.name.charAt(0)}</div>`,
           iconSize: [40, 40],
-          iconAnchor: [20, 20],
-          className: ''
+          iconAnchor: [20, 20]
         });
 
         L.marker([loc.lat, loc.lng], { icon: liveIcon }).addTo(map);
       });
     }
 
-    // Draw current user location
     if (currentLocation && currentUser) {
       L.circle([currentLocation.lat, currentLocation.lng], {
         radius: 50,
@@ -518,18 +458,14 @@ function RepZoneApp() {
       }).addTo(map);
 
       const youIcon = L.divIcon({
-        html: `<div style="background:${currentUser.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.4);position:relative">${currentUser.name.charAt(0)}<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;background:#10b981;border:3px solid white;border-radius:50%;animation:pulse 2s infinite"></div></div>`,
+        html: `<div style="background:${currentUser.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.4)">${currentUser.name.charAt(0)}</div>`,
         iconSize: [48, 48],
-        iconAnchor: [24, 24],
-        className: ''
+        iconAnchor: [24, 24]
       });
 
-      L.marker([currentLocation.lat, currentLocation.lng], { icon: youIcon })
-        .addTo(map)
-        .bindPopup(`<div style="padding:8px;text-align:center"><b style="color:${currentUser.color};font-size:1.125rem">📍 You Are Here</b><br><small style="color:#64748b">Tracking Active</small></div>`);
+      L.marker([currentLocation.lat, currentLocation.lng], { icon: youIcon }).addTo(map);
     }
 
-    // Draw pins
     const filtered = pins.filter(p => {
       if (filter.status !== "all" && p.status !== filter.status) return false;
       if (filter.userId !== "all" && p.team_member_id !== filter.userId) return false;
@@ -538,62 +474,43 @@ function RepZoneApp() {
 
     filtered.forEach(pin => {
       const user = teamMembers.find(u => u.id === pin.team_member_id);
-      const leadType = LEAD_TYPES[pin.status] || LEAD_TYPES.knocked;
+      const icons = { knocked: "✅", flyer: "📬", skipped: "⏭️" };
       const verification = pin.verification_status ? getVerificationStatus(pin.distance_from_pin || 0) : null;
       
       const icon = L.divIcon({
-        html: `<div style="background:${user?.color || '#64748b'};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid ${verification ? verification.color : 'white'};box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative">${leadType.shortLabel}${verification ? `<div style="position:absolute;top:-8px;right:-8px;background:${verification.color};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white">${verification.icon}</div>` : ''}</div>`,
+        html: `<div style="background:${user?.color || '#64748b'};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid ${verification ? verification.color : 'white'};box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative">${icons[pin.status]}${verification ? `<div style="position:absolute;top:-8px;right:-8px;background:${verification.color};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white">${verification.icon}</div>` : ''}</div>`,
         iconSize: [36, 36],
-        iconAnchor: [18, 36],
-        className: ''
+        iconAnchor: [18, 36]
       });
       
       const marker = L.marker([pin.lat, pin.lng], { icon }).addTo(map);
       
       marker.bindPopup(`
         <div style="min-width:200px;padding:12px">
-          <div style="font-size:20px;margin-bottom:8px">${leadType.icon} <b>${leadType.label}</b></div>
-          <div style="padding:8px;background:${user?.color || '#64748b'}22;border-left:3px solid ${user?.color || '#64748b'};margin-bottom:8px">
-            <b>👤 ${pin.rep_name || 'Unknown'}</b>
-          </div>
-          ${pin.note ? `<div style="font-size:13px;margin-bottom:8px">📝 ${pin.note}</div>` : ''}
-          ${verification ? `
-            <div style="padding:8px;background:${verification.color}22;border-left:3px solid ${verification.color};margin-bottom:8px;border-radius:4px">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="font-size:20px">${verification.icon}</span>
-                <b style="color:${verification.color}">${verification.label}</b>
-              </div>
-              <div style="font-size:12px;color:#64748b">
-                <b>${pin.distance_from_pin} feet</b> from actual location
-              </div>
-            </div>
-          ` : ''}
-          <div style="font-size:11px;color:#64748b;margin-bottom:12px">${new Date(pin.created_at).toLocaleString()}</div>
-          <div style="display:flex;gap:6px;padding-top:8px;border-top:2px solid #e2e8f0;flex-wrap:wrap">
-            ${Object.entries(LEAD_TYPES).map(([key, type]) => `
-              <button onclick="window.updatePinStatusGlobal('${pin.id}', '${key}')" style="flex:1;min-width:45px;padding:6px;background:${type.color};color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px">${type.shortLabel}</button>
-            `).join('')}
-          </div>
-          <button onclick="window.deletePinGlobal('${pin.id}')" style="width:100%;margin-top:8px;padding:8px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">🗑️ Delete</button>
+          <b>${icons[pin.status]} ${pin.status.toUpperCase()}</b><br>
+          👤 ${pin.rep_name || 'Unknown'}<br>
+          ${pin.note ? `📝 ${pin.note}<br>` : ''}
+          ${verification ? `<b style="color:${verification.color}">${verification.icon} ${pin.distance_from_pin}ft</b><br>` : ''}
+          <small>${new Date(pin.created_at).toLocaleString()}</small><br>
+          <button onclick="window.updatePinStatusGlobal('${pin.id}','knocked')" style="padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;cursor:pointer;margin:4px">✅</button>
+          <button onclick="window.updatePinStatusGlobal('${pin.id}','flyer')" style="padding:8px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;margin:4px">📬</button>
+          <button onclick="window.deletePinGlobal('${pin.id}')" style="width:100%;margin-top:8px;padding:8px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer">🗑️</button>
         </div>
       `);
     });
-  }, [pins, zones, filter, mapReady, teamMembers, liveLocations, currentLocation, currentUser, showLiveTracking, mode]);
+  }, [pins, zones, filter, mapReady, teamMembers, liveLocations, currentLocation, currentUser, showLiveTracking]);
 
   if (loading) {
     return (
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:'1rem',background:'#f8fafc'}}>
         <div className="spinner"></div>
-        <p style={{color:'#64748b',fontWeight:'500'}}>Loading RepZone...</p>
+        <p style={{color:'#64748b',fontWeight:'500'}}>Loading...</p>
       </div>
     );
   }
 
   const stats = {
     totalPins: pins.length,
-    estimates: pins.filter(p => p.status === 'estimate').length,
-    callbacks: pins.filter(p => p.status === 'callback').length,
-    notinterested: pins.filter(p => p.status === 'notinterested').length,
     knocked: pins.filter(p => p.status === 'knocked').length,
     flyers: pins.filter(p => p.status === 'flyer').length,
     verified: pins.filter(p => p.verification_status === 'verified').length,
@@ -602,6 +519,39 @@ function RepZoneApp() {
   };
 
   const leaderboard = getLeaderboard();
+
+  const LeaderboardView = () => (
+    <div style={{padding:'1rem'}}>
+      <h2 style={{fontSize:'1.5rem',fontWeight:'bold',marginBottom:'1rem'}}>🏆 Leaderboard</h2>
+
+      <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.5rem',background:'#f1f5f9',padding:'0.25rem',borderRadius:'0.75rem'}}>
+        {[['day','Today'],['week','This Week'],['all','All Time']].map(([period, label]) => (
+          <button key={period} onClick={() => setLeaderboardPeriod(period)} style={{flex:1,padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:leaderboardPeriod===period?'white':'transparent',color:leaderboardPeriod===period?'#1e293b':'#64748b',fontWeight:'600',cursor:'pointer',fontSize:'0.875rem',boxShadow:leaderboardPeriod===period?'0 1px 3px rgba(0,0,0,0.1)':'none'}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
+        {leaderboard.map((member, index) => (
+          <div key={member.id} style={{padding:'1.25rem',background:index===0?`linear-gradient(135deg, ${member.color}22 0%, ${member.color}11 100%)`:index===1?'#f8fafc':'white',borderRadius:'1rem',border:index===0?`3px solid ${member.color}`:index===1?'2px solid #e2e8f0':'1px solid #e2e8f0',display:'flex',alignItems:'center',gap:'1rem',boxShadow:index===0?'0 4px 12px rgba(0,0,0,0.1)':'none'}}>
+            <div style={{fontSize:'2rem',fontWeight:'bold',color:index<3?member.color:'#94a3b8',width:'40px'}}>
+              {index===0?'🥇':index===1?'🥈':index===2?'🥉':`#${index+1}`}
+            </div>
+            <div style={{width:'56px',height:'56px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.5rem',position:'relative'}}>
+              {member.name.charAt(0)}
+              {member.isOnline && <div style={{position:'absolute',top:'-4px',right:'-4px',width:'18px',height:'18px',background:'#10b981',border:'3px solid white',borderRadius:'50%'}}></div>}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:'bold',fontSize:'1.125rem',marginBottom:'0.25rem'}}>{member.name}</div>
+              <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.knockCount} doors knocked</div>
+            </div>
+            <div style={{fontSize:'2.5rem',fontWeight:'bold',color:member.color}}>{member.knockCount}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#f8fafc'}}>
@@ -626,13 +576,30 @@ function RepZoneApp() {
             <p style={{color:'#64748b',marginBottom:'1.5rem',fontSize:'0.875rem'}}>Choose your name to start tracking</p>
             <div style={{marginBottom:'1rem'}}>
               {teamMembers.map(member => (
-                <div key={member.id} onClick={() => selectCurrentUser(member)} style={{padding:'1rem',marginBottom:'0.5rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'1rem',transition:'border-color 0.2s'}} onMouseEnter={e => e.currentTarget.style.borderColor = member.color} onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                  <div style={{width:'48px',height:'48px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',flexShrink:0}}>
-                    {member.name.charAt(0)}
+                <div key={member.id} style={{padding:'1rem',marginBottom:'0.5rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',display:'flex',alignItems:'center',gap:'1rem',position:'relative'}}>
+                  <div onClick={() => selectCurrentUser(member)} style={{flex:1,display:'flex',alignItems:'center',gap:'1rem',cursor:'pointer'}}>
+                    <div style={{width:'48px',height:'48px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem'}}>
+                      {member.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div style={{fontWeight:'600',fontSize:'1.125rem'}}>{member.name}</div>
+                      <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.role}</div>
+                    </div>
                   </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:'600',fontSize:'1.125rem'}}>{member.name}</div>
-                    <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.role}</div>
+                  <div style={{position:'relative'}}>
+                    <button onClick={() => setEditingUser(editingUser?.id === member.id ? null : member)} style={{padding:'0.5rem',background:'#f1f5f9',border:'none',borderRadius:'0.5rem',cursor:'pointer',fontSize:'1.25rem'}}>
+                      ⋮
+                    </button>
+                    {editingUser?.id === member.id && (
+                      <div style={{position:'absolute',right:0,top:'100%',marginTop:'0.5rem',background:'white',border:'2px solid #e2e8f0',borderRadius:'0.75rem',padding:'0.5rem',minWidth:'150px',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10}}>
+                        <button onClick={() => updateUserRole(member.id, member.role === 'admin' ? 'rep' : 'admin')} style={{width:'100%',padding:'0.75rem',background:member.role==='admin'?'#f59e0b':'#2563eb',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',marginBottom:'0.5rem',fontSize:'0.875rem'}}>
+                          {member.role === 'admin' ? '👤 Make Rep' : '⭐ Make Admin'}
+                        </button>
+                        <button onClick={() => deleteUser(member.id)} style={{width:'100%',padding:'0.75rem',background:'#ef4444',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'0.875rem'}}>
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -648,115 +615,102 @@ function RepZoneApp() {
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
           <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
             <h3 style={{fontSize:'1.25rem',fontWeight:'bold',marginBottom:'1rem'}}>Add Team Member</h3>
-            <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Enter name" style={{width:'100%',padding:'0.75rem',border:'1px solid #cbd5e1',borderRadius:'0.5rem',marginBottom:'1rem',fontSize:'1rem'}} onKeyPress={e => e.key === 'Enter' && addTeamMember()} />
+            <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Name" style={{width:'100%',padding:'0.75rem',border:'1px solid #cbd5e1',borderRadius:'0.5rem',marginBottom:'1rem',fontSize:'1rem'}} />
+            <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)} style={{width:'100%',padding:'0.75rem',border:'1px solid #cbd5e1',borderRadius:'0.5rem',marginBottom:'1rem',fontSize:'1rem'}}>
+              <option value="rep">Rep</option>
+              <option value="admin">Admin</option>
+            </select>
             <div style={{display:'flex',gap:'0.5rem'}}>
               <button onClick={addTeamMember} style={{flex:1,padding:'0.75rem',background:'#2563eb',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer'}}>Add</button>
-              <button onClick={() => {setShowUserModal(false); setNewUserName("");}} style={{flex:1,padding:'0.75rem',background:'#e2e8f0',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer'}}>Cancel</button>
+              <button onClick={() => {setShowUserModal(false); setNewUserName(""); setNewUserRole("rep");}} style={{flex:1,padding:'0.75rem',background:'#e2e8f0',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer'}}>Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {showUserManagement && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'500px',width:'100%',maxHeight:'80vh',overflowY:'auto'}}>
-            <h3 style={{fontSize:'1.5rem',fontWeight:'bold',marginBottom:'1rem'}}>Manage Team</h3>
-            <div style={{marginBottom:'1.5rem'}}>
-              {teamMembers.map(member => (
-                <div key={member.id} style={{padding:'1rem',marginBottom:'0.75rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',display:'flex',alignItems:'center',gap:'1rem'}}>
-                  <div style={{width:'48px',height:'48px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem'}}>
-                    {member.name.charAt(0)}
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:'600',fontSize:'1.125rem'}}>{member.name}</div>
-                    <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.role}</div>
-                  </div>
-                  <button onClick={() => deleteUser(member.id)} style={{padding:'0.5rem 1rem',background:'#ef4444',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'0.875rem'}}>
-                    Delete
-                  </button>
+      <div style={{display:'flex',height:'100%',gap:'1rem',padding:'1rem'}}>
+        <div style={{width:'400px',background:'white',borderRadius:'0.75rem',boxShadow:'0 4px 6px rgba(0,0,0,0.1)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div style={{padding:'1.5rem',borderBottom:'1px solid #e2e8f0'}}>
+            <h1 style={{fontSize:'1.75rem',fontWeight:'bold',marginBottom:'1rem'}}>RepZone Tracker</h1>
+            {currentUser && (
+              <div style={{display:'flex',alignItems:'center',gap:'0.75rem',padding:'1rem',background:`${currentUser.color}15`,borderRadius:'0.75rem',border:`2px solid ${currentUser.color}`}}>
+                <div style={{width:'48px',height:'48px',borderRadius:'50%',background:currentUser.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem'}}>
+                  {currentUser.name.charAt(0)}
                 </div>
-              ))}
-            </div>
-            <button onClick={() => setShowUserModal(true)} style={{width:'100%',padding:'0.75rem',background:'#2563eb',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem',marginBottom:'0.5rem'}}>
-              ➕ Add New Member
-            </button>
-            <button onClick={() => setShowUserManagement(false)} style={{width:'100%',padding:'0.75rem',background:'#e2e8f0',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem'}}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {selectedZoneForAssignment && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
-            <h3 style={{fontSize:'1.25rem',fontWeight:'bold',marginBottom:'1rem'}}>Assign {selectedZoneForAssignment.name}</h3>
-            <p style={{color:'#64748b',marginBottom:'1rem',fontSize:'0.875rem'}}>Select a team member to assign this zone to:</p>
-            <div style={{marginBottom:'1rem'}}>
-              {teamMembers.map(member => (
-                <div key={member.id} onClick={() => assignZoneToUser(selectedZoneForAssignment.id, member.id)} style={{padding:'1rem',marginBottom:'0.5rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'1rem'}} onMouseEnter={e => e.currentTarget.style.borderColor = member.color} onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                  <div style={{width:'40px',height:'40px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.125rem'}}>
-                    {member.name.charAt(0)}
-                  </div>
-                  <div style={{fontWeight:'600'}}>{member.name}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:'600'}}>{currentUser.name}</div>
+                  <div style={{fontSize:'0.75rem',color:'#64748b'}}>{currentUser.role}</div>
                 </div>
-              ))}
-            </div>
-            <button onClick={() => setSelectedZoneForAssignment(null)} style={{width:'100%',padding:'0.75rem',background:'#e2e8f0',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer'}}>
-              Cancel
-            </button>
+                <button onClick={() => setCurrentUser(null)} style={{padding:'0.5rem',fontSize:'0.75rem',background:'white',border:'1px solid #e2e8f0',borderRadius:'0.5rem',cursor:'pointer'}}>Switch</button>
+              </div>
+            )}
+          </div>
+
+          <div style={{display:'flex',borderBottom:'2px solid #e2e8f0'}}>
+            {[['map','🗺️'],['leaderboard','🏆']].map(([tab,icon]) => (
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`tab ${activeTab === tab ? 'active' : ''}`} style={{flex:1,textAlign:'center'}}>
+                {icon}
+              </button>
+            ))}
+          </div>
+
+          <div style={{flex:1,overflowY:'auto',padding:'1rem'}}>
+            {activeTab === 'map' && (
+              <>
+                <div style={{padding:'1rem',background:trackingEnabled?'#dcfce7':'#fee2e2',borderRadius:'0.75rem',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`,marginBottom:'1rem'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.5rem'}}>
+                    <b>GPS Tracking</b>
+                    <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'0.75rem'}}>
+                      {trackingEnabled ? 'Stop' : 'Start'}
+                    </button>
+                  </div>
+                  <p style={{fontSize:'0.75rem',color:'#64748b'}}>{trackingEnabled ? 'Tracking active' : 'Enable to verify pins'}</p>
+                </div>
+
+                <div style={{marginBottom:'1.5rem'}}>
+                  <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>Mode</label>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem'}}>
+                    {[['drop-pin','📍 Pin'],['draw-zone','✏️ Zone'],['select','👆 Select']].map(([m,label]) => (
+                      <button key={m} onClick={()=>setMode(m)} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:mode===m?'#2563eb':'#f1f5f9',color:mode===m?'white':'#475569',fontSize:'0.875rem',fontWeight:'600',cursor:'pointer'}}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {mode === "drop-pin" && (
+                  <div style={{padding:'1rem',background:'#dbeafe',borderRadius:'0.75rem',marginBottom:'1rem'}}>
+                    <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.75rem'}}>Pin Status</label>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
+                      {[['knocked','✅','#16a34a'],['flyer','📬','#2563eb'],['skipped','⏭️','#ea580c']].map(([s,icon,color]) => (
+                        <button key={s} onClick={()=>setStatus(s)} style={{padding:'1rem',borderRadius:'0.5rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#475569',fontSize:'1.5rem',cursor:'pointer'}}>
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                    <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note" style={{width:'100%',padding:'0.75rem',border:'2px solid #93c5fd',borderRadius:'0.5rem',fontSize:'0.875rem'}} />
+                  </div>
+                )}
+
+                <div style={{padding:'1rem',background:'#f8fafc',borderRadius:'0.75rem'}}>
+                  <h3 style={{fontSize:'1rem',fontWeight:'600',marginBottom:'0.75rem'}}>Stats</h3>
+                  <div style={{fontSize:'0.875rem',color:'#64748b'}}>
+                    ✅ {stats.verified} verified | 🚫 {stats.suspicious} suspicious<br/>
+                    📍 {stats.totalPins} total pins<br/>
+                    👥 {stats.onlineUsers} online
+                  </div>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'leaderboard' && <LeaderboardView />}
           </div>
         </div>
-      )}
 
-      <div style={{position:'fixed',top:0,left:0,right:0,bottom:0}}>
-        <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
-      </div>
-
-      <div style={{position:'fixed',bottom:'1rem',left:'1rem',background:'white',padding:'1rem',borderRadius:'0.75rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:998,maxWidth:'300px'}}>
-        <div style={{fontWeight:'600',marginBottom:'0.5rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <span>{currentUser?.name || 'Guest'}</span>
-          <button onClick={() => setShowUserManagement(true)} style={{padding:'0.5rem',background:'#f1f5f9',border:'none',borderRadius:'0.5rem',cursor:'pointer',fontSize:'0.875rem',fontWeight:'600'}}>
-            👥 Manage
-          </button>
-        </div>
-        
-        <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{width:'100%',padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',cursor:'pointer',marginBottom:'0.75rem',fontWeight:'600',fontSize:'0.875rem'}}>
-          {trackingEnabled ? 'Stop GPS' : 'Start GPS'}
-        </button>
-
-        <div style={{fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>Mode</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
-          {[['drop-pin','📍'],['draw-zone','✏️'],['select','🎯']].map(([m,icon]) => (
-            <button key={m} onClick={()=>setMode(m)} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:mode===m?'#2563eb':'#f1f5f9',color:mode===m?'white':'#475569',fontSize:'1.25rem',cursor:'pointer'}}>
-              {icon}
-            </button>
-          ))}
-        </div>
-
-        {mode === "drop-pin" && (
-          <div style={{padding:'0.75rem',background:'#dbeafe',borderRadius:'0.5rem',marginBottom:'0.75rem'}}>
-            <div style={{fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>Lead Type</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
-              {Object.entries(LEAD_TYPES).slice(0, 3).map(([key, type]) => (
-                <button key={key} onClick={()=>setStatus(key)} style={{padding:'0.75rem 0.5rem',borderRadius:'0.5rem',border:status===key?'none':'2px solid #bfdbfe',background:status===key?type.color:'white',color:status===key?'white':'#475569',fontSize:'1.25rem',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem'}}>
-                  <div>{type.icon}</div>
-                  <div style={{fontSize:'0.625rem',fontWeight:'600'}}>{type.shortLabel}</div>
-                </button>
-              ))}
-            </div>
-            <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note" style={{width:'100%',padding:'0.5rem',border:'2px solid #93c5fd',borderRadius:'0.5rem',fontSize:'0.875rem'}} />
-          </div>
-        )}
-
-        <div style={{fontSize:'0.75rem',color:'#64748b'}}>
-          💰 {stats.estimates} estimates | 📞 {stats.callbacks} callbacks | ✅ {stats.verified} verified
+        <div style={{flex:1,borderRadius:'0.75rem',overflow:'hidden',boxShadow:'0 4px 6px rgba(0,0,0,0.1)'}}>
+          <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
         </div>
       </div>
-
-      <button onClick={() => setCurrentUser(null)} style={{position:'fixed',top:'1rem',left:'1rem',padding:'0.5rem 1rem',background:'white',border:'2px solid #e2e8f0',borderRadius:'0.5rem',cursor:'pointer',zIndex:999,fontWeight:'600'}}>
-        Switch User
-      </button>
     </div>
   );
 }
