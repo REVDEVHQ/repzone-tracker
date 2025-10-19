@@ -36,7 +36,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const COLORS = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 
-// LEAD TYPES - A, B, C + Old ones
 const LEAD_TYPES = {
   estimate: { icon: '💰', label: 'A - Estimate', color: '#10b981', display: 'A' },
   callback: { icon: '📞', label: 'B - Callback 1-2 Weeks', color: '#f59e0b', display: 'B' },
@@ -84,6 +83,7 @@ function RepZoneApp() {
   const [mode, setMode] = useState("drop-pin");
   const [status, setStatus] = useState("estimate");
   const [activeZoneId, setActiveZoneId] = useState(null);
+  const [selectedZone, setSelectedZone] = useState(null);
   const [note, setNote] = useState("");
   const [filter, setFilter] = useState({ status: "all", userId: "all" });
   const [activeTab, setActiveTab] = useState("map");
@@ -104,6 +104,7 @@ function RepZoneApp() {
   const supabase = useRef(null);
   const locationWatchId = useRef(null);
   const locationUpdateInterval = useRef(null);
+  const zoneLayersRef = useRef({});
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -249,6 +250,29 @@ function RepZoneApp() {
     setEditingUser(null);
   }
 
+  async function assignZone(zoneId, userId) {
+    const member = teamMembers.find(m => m.id === userId);
+    await supabase.current.from('zones').update({ 
+      assigned_to: userId,
+      color: member?.color || COLORS[0]
+    }).eq('id', zoneId);
+    setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: userId, color: member?.color} : z));
+    setSelectedZone(null);
+  }
+
+  async function unassignZone(zoneId) {
+    await supabase.current.from('zones').update({ assigned_to: null }).eq('id', zoneId);
+    setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: null} : z));
+    setSelectedZone(null);
+  }
+
+  async function deleteZone(zoneId) {
+    if (!confirm('Delete this zone permanently?')) return;
+    await supabase.current.from('zones').delete().eq('id', zoneId);
+    setZones(prev => prev.filter(z => z.id !== zoneId));
+    setSelectedZone(null);
+  }
+
   useEffect(() => {
     window.deletePinGlobal = deletePin;
     window.updatePinStatusGlobal = updatePinStatus;
@@ -335,31 +359,22 @@ function RepZoneApp() {
       const { lat, lng } = e.latlng;
       
       if (mode === "drop-pin" && currentUser) {
-        // FIXED ZONE LOGIC - Super simple now
-        const clickedZone = zones.find(z => {
-          if (!z.points || z.points.length < 3) return false;
-          return isPointInPolygon([lat, lng], z.points);
-        });
-
-        // Check if zone is assigned to someone else
-        if (clickedZone?.assigned_to) {
-          // If user is NOT admin AND zone is NOT theirs, block it
-          if (currentUser.role !== 'admin' && clickedZone.assigned_to !== currentUser.id) {
-            const assignedUser = teamMembers.find(u => u.id === clickedZone.assigned_to);
-            alert(`⚠️ This zone is assigned to ${assignedUser?.name || 'another user'}.\n\nOnly ${assignedUser?.name || 'that user'} or admins can drop pins here.`);
-            return; // Block the pin drop
-          }
-        }
-        // If we get here, user is allowed to drop pin
+        // SIMPLIFIED: Reps can drop ANYWHERE!
+        // Zones are just visual guides, not restrictions
 
         if (!currentLocation) {
-          alert('⚠️ Enable GPS tracking first to verify your location!');
+          alert('⚠️ Enable GPS tracking first!');
           return;
         }
 
         setSaving(true);
         const distance = calculateDistance(currentLocation.lat, currentLocation.lng, lat, lng);
         const verification = getVerificationStatus(distance);
+
+        const clickedZone = zones.find(z => {
+          if (!z.points || z.points.length < 3) return false;
+          return isPointInPolygon([lat, lng], z.points);
+        });
 
         const newPin = {
           id: `pin-${Date.now()}`,
@@ -381,9 +396,15 @@ function RepZoneApp() {
         setSaving(false);
 
         if (verification.status === 'suspicious') {
-          alert(`⚠️ Warning: You are ${Math.round(distance)} feet from the pin location!`);
+          alert(`⚠️ Warning: You are ${Math.round(distance)} feet from the pin!`);
         }
       } else if (mode === "draw-zone") {
+        // Only admins can draw zones
+        if (currentUser?.role !== 'admin') {
+          alert('⚠️ Only admins can create zones!');
+          return;
+        }
+
         const id = activeZoneId || `zone-${Date.now()}`;
         const existing = zones.find(z => z.id === id);
         const newPoints = existing ? [...existing.points, [lat, lng]] : [[lat, lng]];
@@ -429,15 +450,37 @@ function RepZoneApp() {
       }
     });
 
+    // Clear zone layer references
+    zoneLayersRef.current = {};
+
     zones.forEach(zone => {
       if (zone.points?.length >= 3) {
         const assigned = teamMembers.find(u => u.id === zone.assigned_to);
-        L.polygon(zone.points, {
+        const polygon = L.polygon(zone.points, {
           color: assigned?.color || zone.color,
           fillColor: assigned?.color || zone.color,
           fillOpacity: 0.2,
           weight: 3
-        }).addTo(map).bindPopup(`<b>${zone.name}</b><br>${assigned ? `👤 ${assigned.name}` : '⚠️ Unassigned'}`);
+        }).addTo(map);
+
+        // Store reference
+        zoneLayersRef.current[zone.id] = polygon;
+
+        // Click handler for zone selection
+        polygon.on('click', (e) => {
+          if (mode === "select") {
+            L.DomEvent.stopPropagation(e);
+            setSelectedZone(zone);
+          }
+        });
+
+        polygon.bindPopup(`
+          <div style="padding:8px;min-width:150px">
+            <b style="font-size:16px">${zone.name}</b><br>
+            ${assigned ? `<span style="color:${assigned.color}">👤 ${assigned.name}</span>` : '⚠️ Unassigned'}
+            ${mode === "select" ? '<br><small style="color:#64748b">Click to manage</small>' : ''}
+          </div>
+        `);
       }
     });
 
@@ -520,7 +563,7 @@ function RepZoneApp() {
         </div>
       `);
     });
-  }, [pins, zones, filter, mapReady, teamMembers, liveLocations, currentLocation, currentUser, showLiveTracking]);
+  }, [pins, zones, filter, mapReady, teamMembers, liveLocations, currentLocation, currentUser, showLiveTracking, mode]);
 
   if (loading) {
     return (
@@ -590,6 +633,62 @@ function RepZoneApp() {
         <div style={{position:'fixed',top:'1rem',right:'1rem',background:'#10b981',color:'white',padding:'0.75rem 1.25rem',borderRadius:'2rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10001,display:'flex',gap:'0.75rem',alignItems:'center',fontSize:'0.875rem',fontWeight:'600'}}>
           <div style={{width:'12px',height:'12px',background:'white',borderRadius:'50%',animation:'pulse 2s infinite'}}></div>
           <span>GPS Active</span>
+        </div>
+      )}
+
+      {selectedZone && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
+          <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
+            <h3 style={{fontSize:'1.25rem',fontWeight:'bold',marginBottom:'1rem'}}>{selectedZone.name}</h3>
+            {selectedZone.assigned_to ? (
+              <>
+                <div style={{padding:'1rem',background:'#f0fdf4',borderRadius:'0.75rem',border:'2px solid #10b981',marginBottom:'1rem'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'1rem'}}>
+                    <div style={{width:'48px',height:'48px',borderRadius:'50%',background:teamMembers.find(u => u.id === selectedZone.assigned_to)?.color || '#64748b',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem'}}>
+                      {teamMembers.find(u => u.id === selectedZone.assigned_to)?.name.charAt(0) || '?'}
+                    </div>
+                    <div>
+                      <div style={{fontWeight:'600',fontSize:'1.125rem'}}>Assigned to</div>
+                      <div style={{fontSize:'0.875rem',color:'#166534'}}>{teamMembers.find(u => u.id === selectedZone.assigned_to)?.name || 'Unknown'}</div>
+                    </div>
+                  </div>
+                </div>
+                {currentUser?.role === 'admin' && (
+                  <button onClick={() => unassignZone(selectedZone.id)} style={{width:'100%',padding:'0.75rem',background:'#f59e0b',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',marginBottom:'0.5rem'}}>
+                    Unassign Zone
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                {currentUser?.role === 'admin' ? (
+                  <>
+                    <p style={{color:'#64748b',marginBottom:'1rem',fontSize:'0.875rem'}}>Assign this zone to a team member:</p>
+                    <div style={{marginBottom:'1rem',maxHeight:'300px',overflowY:'auto'}}>
+                      {teamMembers.map(member => (
+                        <div key={member.id} onClick={() => assignZone(selectedZone.id, member.id)} style={{padding:'1rem',marginBottom:'0.5rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'1rem',transition:'all 0.2s'}} onMouseEnter={e => e.currentTarget.style.borderColor = member.color} onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                          <div style={{width:'40px',height:'40px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.125rem'}}>
+                            {member.name.charAt(0)}
+                          </div>
+                          <div style={{fontWeight:'600'}}>{member.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p style={{color:'#64748b',marginBottom:'1rem',fontSize:'0.875rem'}}>⚠️ This zone is unassigned. Only admins can assign zones.</p>
+                )}
+              </>
+            )}
+            {currentUser?.role === 'admin' && (
+              <button onClick={() => deleteZone(selectedZone.id)} style={{width:'100%',padding:'0.75rem',background:'#ef4444',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',marginBottom:'0.5rem'}}>
+                🗑️ Delete Zone
+              </button>
+            )}
+            <button onClick={() => setSelectedZone(null)} style={{width:'100%',padding:'0.75rem',background:'#e2e8f0',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer'}}>
+              Close
+            </button>
+          </div>
         </div>
       )}
 
@@ -700,6 +799,12 @@ function RepZoneApp() {
                       </button>
                     ))}
                   </div>
+                  {mode === "draw-zone" && currentUser?.role !== 'admin' && (
+                    <p style={{fontSize:'0.75rem',color:'#ef4444',marginTop:'0.5rem',fontWeight:'600'}}>⚠️ Only admins can create zones</p>
+                  )}
+                  {mode === "select" && (
+                    <p style={{fontSize:'0.75rem',color:'#64748b',marginTop:'0.5rem'}}>Click on a zone to assign/delete</p>
+                  )}
                 </div>
 
                 {mode === "drop-pin" && (
