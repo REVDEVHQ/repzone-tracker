@@ -36,6 +36,15 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const COLORS = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
 
+const LEAD_TYPES = {
+  estimate: { icon: '💰', label: 'A - Estimate', color: '#10b981', shortLabel: 'A' },
+  callback: { icon: '📞', label: 'B - Callback 1-2 Weeks', color: '#f59e0b', shortLabel: 'B' },
+  notinterested: { icon: '📋', label: 'C - Not Interested (Has Info)', color: '#64748b', shortLabel: 'C' },
+  knocked: { icon: '✅', label: 'Knocked', color: '#16a34a', shortLabel: '✅' },
+  flyer: { icon: '📬', label: 'Flyer', color: '#2563eb', shortLabel: '📬' },
+  skipped: { icon: '⏭️', label: 'Skipped', color: '#ef4444', shortLabel: '⏭️' }
+};
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
@@ -53,6 +62,17 @@ function getVerificationStatus(distance) {
   return { status: 'suspicious', color: '#ef4444', icon: '🚫', label: 'Suspicious' };
 }
 
+function isPointInPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+    const intersect = ((yi > point[1]) !== (yj > point[1])) && (point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 function RepZoneApp() {
   const [pins, setPins] = useState([]);
   const [zones, setZones] = useState([]);
@@ -61,8 +81,9 @@ function RepZoneApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [mode, setMode] = useState("drop-pin");
-  const [status, setStatus] = useState("knocked");
+  const [status, setStatus] = useState("estimate");
   const [activeZoneId, setActiveZoneId] = useState(null);
+  const [selectedZoneForAssignment, setSelectedZoneForAssignment] = useState(null);
   const [note, setNote] = useState("");
   const [filter, setFilter] = useState({ status: "all", userId: "all" });
   const [activeTab, setActiveTab] = useState("map");
@@ -70,6 +91,7 @@ function RepZoneApp() {
   const [saving, setSaving] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showUserManagement, setShowUserManagement] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -230,6 +252,25 @@ function RepZoneApp() {
     setPins(prev => prev.map(p => p.id === pinId ? {...p, status: newStatus} : p));
   }
 
+  async function deleteUser(userId) {
+    if (!confirm('Delete this user? All their pins will remain but be unassigned.')) return;
+    await supabase.current.from('team_members').delete().eq('id', userId);
+    setTeamMembers(prev => prev.filter(u => u.id !== userId));
+    if (currentUser?.id === userId) {
+      setCurrentUser(null);
+    }
+  }
+
+  async function assignZoneToUser(zoneId, userId) {
+    const member = teamMembers.find(m => m.id === userId);
+    await supabase.current.from('zones').update({ 
+      assigned_to: userId,
+      color: member?.color || COLORS[0]
+    }).eq('id', zoneId);
+    setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: userId, color: member?.color} : z));
+    setSelectedZoneForAssignment(null);
+  }
+
   useEffect(() => {
     window.deletePinGlobal = deletePin;
     window.updatePinStatusGlobal = updatePinStatus;
@@ -273,9 +314,9 @@ function RepZoneApp() {
       const dayPins = memberPins.filter(p => new Date(p.created_at) >= startOfDay);
       
       let count = 0;
-      if (leaderboardPeriod === 'week') count = weekPins.filter(p => p.status === 'knocked').length;
-      else if (leaderboardPeriod === 'day') count = dayPins.filter(p => p.status === 'knocked').length;
-      else count = memberPins.filter(p => p.status === 'knocked').length;
+      if (leaderboardPeriod === 'week') count = weekPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
+      else if (leaderboardPeriod === 'day') count = dayPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
+      else count = memberPins.filter(p => ['estimate', 'knocked'].includes(p.status)).length;
 
       const liveLocation = liveLocations.find(l => l.team_member_id === member.id);
       const isOnline = liveLocation && new Date(liveLocation.last_updated) > new Date(Date.now() - 5 * 60 * 1000);
@@ -319,6 +360,18 @@ function RepZoneApp() {
       const { lat, lng } = e.latlng;
       
       if (mode === "drop-pin" && currentUser) {
+        // Check if clicking in assigned zone
+        const clickedZone = zones.find(z => {
+          if (!z.points || z.points.length < 3) return false;
+          return isPointInPolygon([lat, lng], z.points);
+        });
+
+        if (clickedZone && clickedZone.assigned_to && clickedZone.assigned_to !== currentUser.id) {
+          const assignedUser = teamMembers.find(u => u.id === clickedZone.assigned_to);
+          alert(`⚠️ This zone "${clickedZone.name}" is assigned to ${assignedUser?.name}. You can only drop pins in your assigned zones or unassigned areas.`);
+          return;
+        }
+
         if (!currentLocation) {
           alert('Unable to verify location. Please enable location services.');
           return;
@@ -333,6 +386,7 @@ function RepZoneApp() {
           lat, lng, status,
           rep_name: currentUser.name,
           team_member_id: currentUser.id,
+          zone_id: clickedZone?.id || null,
           note: note || null,
           actual_lat: currentLocation.lat,
           actual_lng: currentLocation.lng,
@@ -359,10 +413,12 @@ function RepZoneApp() {
           setZones(prev => prev.map(z => z.id === id ? {...z, points: newPoints} : z));
         } else {
           const newZone = {
-            id, name: `Zone ${zones.length + 1}`,
+            id, 
+            name: `Zone ${zones.length + 1}`,
             color: COLORS[zones.length % COLORS.length],
             points: newPoints,
             created_by: currentUser?.name || 'Admin',
+            assigned_to: null,
             created_at: new Date().toISOString()
           };
           await supabase.current.from('zones').insert([newZone]);
@@ -381,7 +437,7 @@ function RepZoneApp() {
     });
 
     return () => map.off('click', handleClick);
-  }, [mode, status, note, activeZoneId, zones, mapReady, currentUser, currentLocation]);
+  }, [mode, status, note, activeZoneId, zones, mapReady, currentUser, currentLocation, teamMembers]);
 
   // Render map layers
   useEffect(() => {
@@ -398,15 +454,24 @@ function RepZoneApp() {
     zones.forEach(zone => {
       if (zone.points?.length >= 3) {
         const assigned = teamMembers.find(u => u.id === zone.assigned_to);
-        L.polygon(zone.points, {
+        const polygon = L.polygon(zone.points, {
           color: assigned?.color || zone.color,
           fillColor: assigned?.color || zone.color,
           fillOpacity: 0.2,
           weight: 3
-        }).addTo(map).bindPopup(`
+        }).addTo(map);
+
+        polygon.on('click', () => {
+          if (mode === "select") {
+            setSelectedZoneForAssignment(zone);
+          }
+        });
+
+        polygon.bindPopup(`
           <div style="padding:8px;min-width:150px">
             <b style="font-size:16px">${zone.name}</b><br>
             ${assigned ? `<span style="color:${assigned.color}">👤 ${assigned.name}</span>` : '⚠️ Unassigned'}
+            ${mode === "select" ? '<br><small style="color:#64748b">Click to assign</small>' : ''}
           </div>
         `);
       }
@@ -473,11 +538,11 @@ function RepZoneApp() {
 
     filtered.forEach(pin => {
       const user = teamMembers.find(u => u.id === pin.team_member_id);
-      const icons = { knocked: "✅", flyer: "📬", skipped: "⏭️" };
+      const leadType = LEAD_TYPES[pin.status] || LEAD_TYPES.knocked;
       const verification = pin.verification_status ? getVerificationStatus(pin.distance_from_pin || 0) : null;
       
       const icon = L.divIcon({
-        html: `<div style="background:${user?.color || '#64748b'};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid ${verification ? verification.color : 'white'};box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative">${icons[pin.status]}${verification ? `<div style="position:absolute;top:-8px;right:-8px;background:${verification.color};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white">${verification.icon}</div>` : ''}</div>`,
+        html: `<div style="background:${user?.color || '#64748b'};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid ${verification ? verification.color : 'white'};box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative">${leadType.shortLabel}${verification ? `<div style="position:absolute;top:-8px;right:-8px;background:${verification.color};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white">${verification.icon}</div>` : ''}</div>`,
         iconSize: [36, 36],
         iconAnchor: [18, 36],
         className: ''
@@ -487,7 +552,7 @@ function RepZoneApp() {
       
       marker.bindPopup(`
         <div style="min-width:200px;padding:12px">
-          <div style="font-size:20px;margin-bottom:8px">${icons[pin.status]} <b>${pin.status.toUpperCase()}</b></div>
+          <div style="font-size:20px;margin-bottom:8px">${leadType.icon} <b>${leadType.label}</b></div>
           <div style="padding:8px;background:${user?.color || '#64748b'}22;border-left:3px solid ${user?.color || '#64748b'};margin-bottom:8px">
             <b>👤 ${pin.rep_name || 'Unknown'}</b>
           </div>
@@ -504,15 +569,16 @@ function RepZoneApp() {
             </div>
           ` : ''}
           <div style="font-size:11px;color:#64748b;margin-bottom:12px">${new Date(pin.created_at).toLocaleString()}</div>
-          <div style="display:flex;gap:8px;padding-top:8px;border-top:2px solid #e2e8f0">
-            <button onclick="window.updatePinStatusGlobal('${pin.id}', 'knocked')" style="flex:1;padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">✅</button>
-            <button onclick="window.updatePinStatusGlobal('${pin.id}', 'flyer')" style="flex:1;padding:8px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">📬</button>
+          <div style="display:flex;gap:6px;padding-top:8px;border-top:2px solid #e2e8f0;flex-wrap:wrap">
+            ${Object.entries(LEAD_TYPES).map(([key, type]) => `
+              <button onclick="window.updatePinStatusGlobal('${pin.id}', '${key}')" style="flex:1;min-width:45px;padding:6px;background:${type.color};color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px">${type.shortLabel}</button>
+            `).join('')}
           </div>
-          <button onclick="window.deletePinGlobal('${pin.id}')" style="width:100%;margin-top:8px;padding:8px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">🗑️ Delete Pin</button>
+          <button onclick="window.deletePinGlobal('${pin.id}')" style="width:100%;margin-top:8px;padding:8px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">🗑️ Delete</button>
         </div>
       `);
     });
-  }, [pins, zones, filter, mapReady, teamMembers, liveLocations, currentLocation, currentUser, showLiveTracking]);
+  }, [pins, zones, filter, mapReady, teamMembers, liveLocations, currentLocation, currentUser, showLiveTracking, mode]);
 
   if (loading) {
     return (
@@ -525,6 +591,9 @@ function RepZoneApp() {
 
   const stats = {
     totalPins: pins.length,
+    estimates: pins.filter(p => p.status === 'estimate').length,
+    callbacks: pins.filter(p => p.status === 'callback').length,
+    notinterested: pins.filter(p => p.status === 'notinterested').length,
     knocked: pins.filter(p => p.status === 'knocked').length,
     flyers: pins.filter(p => p.status === 'flyer').length,
     verified: pins.filter(p => p.verification_status === 'verified').length,
@@ -533,65 +602,6 @@ function RepZoneApp() {
   };
 
   const leaderboard = getLeaderboard();
-
-  const LeaderboardView = () => (
-    <div style={{padding:'1rem'}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
-        <h2 style={{fontSize:'1.5rem',fontWeight:'bold'}}>🏆 Leaderboard</h2>
-      </div>
-
-      <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.5rem',background:'#f1f5f9',padding:'0.25rem',borderRadius:'0.75rem'}}>
-        {[['day','Today'],['week','This Week'],['all','All Time']].map(([period, label]) => (
-          <button key={period} onClick={() => setLeaderboardPeriod(period)} style={{flex:1,padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:leaderboardPeriod===period?'white':'transparent',color:leaderboardPeriod===period?'#1e293b':'#64748b',fontWeight:'600',cursor:'pointer',fontSize:'0.875rem',boxShadow:leaderboardPeriod===period?'0 1px 3px rgba(0,0,0,0.1)':'none',transition:'all 0.2s'}}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
-        {leaderboard.map((member, index) => (
-          <div key={member.id} style={{padding:'1.25rem',background:index===0?`linear-gradient(135deg, ${member.color}22 0%, ${member.color}11 100%)`:index===1?'#f8fafc':'white',borderRadius:'1rem',border:index===0?`3px solid ${member.color}`:index===1?'2px solid #e2e8f0':'1px solid #e2e8f0',display:'flex',alignItems:'center',gap:'1rem',position:'relative',boxShadow:index===0?'0 4px 12px rgba(0,0,0,0.1)':index===1?'0 2px 8px rgba(0,0,0,0.05)':'none'}}>
-            {index < 3 && (
-              <div style={{position:'absolute',top:'-12px',left:'-12px',width:'40px',height:'40px',borderRadius:'50%',background:index===0?'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)':index===1?'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)':'linear-gradient(135deg, #fb923c 0%, #ea580c 100%)',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.125rem',boxShadow:'0 2px 8px rgba(0,0,0,0.2)'}}>
-                {index===0?'🥇':index===1?'🥈':'🥉'}
-              </div>
-            )}
-            <div style={{fontSize:'2rem',fontWeight:'bold',color:index<3?member.color:'#94a3b8',width:'40px',textAlign:'center'}}>
-              {index>=3?`#${index+1}`:''}
-            </div>
-            <div style={{width:'56px',height:'56px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.5rem',flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,0.15)',position:'relative'}}>
-              {member.name.charAt(0)}
-              {member.isOnline && (
-                <div style={{position:'absolute',top:'-4px',right:'-4px',width:'18px',height:'18px',background:'#10b981',border:'3px solid white',borderRadius:'50%'}}></div>
-              )}
-            </div>
-            <div style={{flex:1}}>
-              <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.25rem'}}>
-                <span style={{fontWeight:'bold',fontSize:'1.125rem'}}>{member.name}</span>
-                {member.isOnline && (
-                  <span style={{fontSize:'0.625rem',padding:'0.25rem 0.5rem',background:'#10b981',color:'white',borderRadius:'1rem',fontWeight:'600'}}>● ONLINE</span>
-                )}
-              </div>
-              <div style={{fontSize:'0.75rem',color:'#64748b'}}>
-                {member.knockCount} doors knocked
-              </div>
-            </div>
-            <div style={{fontSize:'2.5rem',fontWeight:'bold',color:member.color,textAlign:'right'}}>
-              {member.knockCount}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {leaderboard.length === 0 && (
-        <div style={{textAlign:'center',padding:'3rem',color:'#64748b'}}>
-          <div style={{fontSize:'3rem',marginBottom:'1rem'}}>🏆</div>
-          <p style={{fontSize:'1.125rem',fontWeight:'600',marginBottom:'0.5rem'}}>No data yet</p>
-          <p style={{fontSize:'0.875rem'}}>Start knocking doors to see rankings!</p>
-        </div>
-      )}
-    </div>
-  );
 
   return (
     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#f8fafc'}}>
@@ -647,324 +657,106 @@ function RepZoneApp() {
         </div>
       )}
 
-      {isMobile ? (
-        <>
-          <div style={{position:'absolute',top:0,left:0,right:0,bottom:0}}>
-            <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
-          </div>
-
-          <div style={{position:'fixed',top:0,left:0,right:0,background:'white',padding:'0.75rem 1rem',boxShadow:'0 2px 8px rgba(0,0,0,0.1)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
-              <div style={{width:'40px',height:'40px',borderRadius:'50%',background:currentUser?.color || '#64748b',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.125rem',position:'relative'}}>
-                {currentUser?.name?.charAt(0) || '?'}
-                {trackingEnabled && (
-                  <div style={{position:'absolute',top:'-4px',right:'-4px',width:'14px',height:'14px',background:'#10b981',border:'2px solid white',borderRadius:'50%'}}></div>
-                )}
-              </div>
-              <div>
-                <div style={{fontWeight:'600',fontSize:'0.875rem'}}>{currentUser?.name || 'Guest'}</div>
-                <div style={{fontSize:'0.625rem',color:'#64748b'}}>
-                  {stats.onlineUsers} online • {stats.verified} verified
-                </div>
-              </div>
-            </div>
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{padding:'0.5rem',background:'#f1f5f9',border:'none',borderRadius:'0.5rem',cursor:'pointer',fontSize:'1.25rem'}}>
-              {sidebarOpen ? '✕' : '☰'}
-            </button>
-          </div>
-
-          {sidebarOpen && (
-            <div onClick={() => setSidebarOpen(false)} style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.3)',zIndex:1000}}>
-              <div onClick={e => e.stopPropagation()} style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTopLeftRadius:'1.5rem',borderTopRightRadius:'1.5rem',maxHeight:'85vh',overflowY:'auto',paddingBottom:'6rem'}}>
-                <div style={{width:'40px',height:'4px',background:'#cbd5e1',borderRadius:'2px',margin:'1rem auto'}}></div>
-                
-                <div style={{display:'flex',borderBottom:'2px solid #e2e8f0',marginBottom:'1rem'}}>
-                  {[['controls','🎮'],['leaderboard','🏆'],['live','📡']].map(([tab,icon]) => (
-                    <button key={tab} onClick={() => setActiveTab(tab)} className={`tab ${activeTab === tab ? 'active' : ''}`} style={{flex:1,textAlign:'center'}}>
-                      {icon}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={{padding:'0 1.5rem'}}>
-                  {activeTab === 'controls' && (
-                    <>
-                      <h2 style={{fontSize:'1.25rem',fontWeight:'bold',marginBottom:'1rem'}}>Controls</h2>
-
-                      <div style={{marginBottom:'1.5rem',padding:'1rem',background:trackingEnabled?'#dcfce7':'#fee2e2',borderRadius:'1rem',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'0.5rem'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                            <span style={{fontSize:'1.5rem'}}>📍</span>
-                            <b>GPS Tracking</b>
-                          </div>
-                          <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',fontSize:'0.875rem',cursor:'pointer'}}>
-                            {trackingEnabled ? 'Stop' : 'Start'}
-                          </button>
-                        </div>
-                        <p style={{fontSize:'0.75rem',color:'#64748b'}}>
-                          {trackingEnabled ? 'Your location is being tracked for verification' : 'Enable to verify pin locations'}
-                        </p>
-                      </div>
-
-                      <div style={{marginBottom:'1.5rem'}}>
-                        <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>Mode</label>
-                        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem'}}>
-                          {[['drop-pin','📍'],['draw-zone','✏️'],['select','👆']].map(([m,icon]) => (
-                            <button key={m} onClick={()=>setMode(m)} style={{padding:'1rem 0.5rem',borderRadius:'0.75rem',border:'none',background:mode===m?'#2563eb':'#f1f5f9',color:mode===m?'white':'#475569',fontSize:'1.5rem',cursor:'pointer'}}>
-                              {icon}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {mode === "drop-pin" && (
-                        <div style={{padding:'1rem',background:'#dbeafe',borderRadius:'1rem',marginBottom:'1rem'}}>
-                          <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.75rem'}}>Status</label>
-                          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
-                            {[['knocked','✅','#16a34a'],['flyer','📬','#2563eb'],['skipped','⏭️','#ea580c']].map(([s,icon,color]) => (
-                              <button key={s} onClick={()=>setStatus(s)} style={{padding:'1rem',borderRadius:'0.75rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#475569',fontSize:'1.5rem',cursor:'pointer'}}>
-                                {icon}
-                              </button>
-                            ))}
-                          </div>
-                          <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, dog, etc.)" style={{width:'100%',padding:'0.75rem',border:'2px solid #93c5fd',borderRadius:'0.75rem',fontSize:'1rem'}} />
-                          {!trackingEnabled && (
-                            <p style={{marginTop:'0.5rem',fontSize:'0.75rem',color:'#ef4444',fontWeight:'600'}}>⚠️ Enable GPS tracking to verify locations</p>
-                          )}
-                        </div>
-                      )}
-
-                      <div style={{padding:'1rem',background:'#f8fafc',borderRadius:'1rem',marginBottom:'1rem'}}>
-                        <h3 style={{fontSize:'1rem',fontWeight:'600',marginBottom:'0.75rem'}}>Verification Stats</h3>
-                        <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.75rem'}}>
-                          <div style={{textAlign:'center',padding:'0.75rem',background:'white',borderRadius:'0.5rem',border:'2px solid #10b981'}}>
-                            <div style={{fontSize:'1.75rem',fontWeight:'bold',color:'#10b981'}}>{stats.verified}</div>
-                            <div style={{fontSize:'0.75rem',color:'#64748b'}}>✅ Verified</div>
-                          </div>
-                          <div style={{textAlign:'center',padding:'0.75rem',background:'white',borderRadius:'0.5rem',border:'2px solid #ef4444'}}>
-                            <div style={{fontSize:'1.75rem',fontWeight:'bold',color:'#ef4444'}}>{stats.suspicious}</div>
-                            <div style={{fontSize:'0.75rem',color:'#64748b'}}>🚫 Suspicious</div>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {activeTab === 'leaderboard' && <LeaderboardView />}
-
-                  {activeTab === 'live' && (
-                    <div style={{padding:'1rem'}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
-                        <h2 style={{fontSize:'1.25rem',fontWeight:'bold'}}>📡 Live Tracking</h2>
-                        <button onClick={() => setShowLiveTracking(!showLiveTracking)} style={{padding:'0.5rem 1rem',background:showLiveTracking?'#10b981':'#e2e8f0',color:showLiveTracking?'white':'#64748b',border:'none',borderRadius:'0.5rem',fontWeight:'600',fontSize:'0.875rem',cursor:'pointer'}}>
-                          {showLiveTracking ? 'Hide' : 'Show'}
-                        </button>
-                      </div>
-
-                      <div style={{marginBottom:'1.5rem',padding:'1rem',background:'#f0fdf4',borderRadius:'1rem',border:'2px solid #10b981'}}>
-                        <div style={{fontSize:'0.875rem',color:'#166534',marginBottom:'0.5rem'}}>
-                          <b>{stats.onlineUsers} team member{stats.onlineUsers !== 1 ? 's' : ''} online</b>
-                        </div>
-                        <p style={{fontSize:'0.75rem',color:'#64748b'}}>
-                          Active within the last 5 minutes
-                        </p>
-                      </div>
-
-                      <h3 style={{fontSize:'1rem',fontWeight:'600',marginBottom:'0.75rem'}}>Team Members</h3>
-                      <div style={{display:'flex',flexDirection:'column',gap:'0.75rem'}}>
-                        {leaderboard.map(member => {
-                          const isCurrentUser = member.id === currentUser?.id;
-                          return (
-                            <div key={member.id} style={{padding:'1rem',background:isCurrentUser?`${member.color}15`:'white',borderRadius:'0.75rem',border:`2px solid ${isCurrentUser?member.color:'#e2e8f0'}`,display:'flex',alignItems:'center',gap:'1rem'}}>
-                              <div style={{width:'48px',height:'48px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',position:'relative'}}>
-                                {member.name.charAt(0)}
-                                {member.isOnline && (
-                                  <div style={{position:'absolute',top:'-4px',right:'-4px',width:'16px',height:'16px',background:'#10b981',border:'3px solid white',borderRadius:'50%'}}></div>
-                                )}
-                              </div>
-                              <div style={{flex:1}}>
-                                <div style={{fontWeight:'600',marginBottom:'0.25rem'}}>
-                                  {member.name} {isCurrentUser && '(You)'}
-                                </div>
-                                {member.isOnline ? (
-                                  <div style={{fontSize:'0.75rem',color:'#10b981',fontWeight:'600'}}>● ONLINE NOW</div>
-                                ) : (
-                                  <div style={{fontSize:'0.75rem',color:'#64748b'}}>Offline</div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  <button onClick={() => setCurrentUser(null)} style={{width:'100%',padding:'1rem',background:'#ef4444',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem',marginTop:'1rem'}}>
-                    Switch User
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        <div style={{display:'flex',height:'100%',gap:'1rem',padding:'1rem'}}>
-          <div style={{width:'400px',background:'white',borderRadius:'0.75rem',boxShadow:'0 4px 6px rgba(0,0,0,0.1)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-            <div style={{padding:'1.5rem',borderBottom:'1px solid #e2e8f0'}}>
-              <h1 style={{fontSize:'1.75rem',fontWeight:'bold',marginBottom:'1rem'}}>RepZone Pro</h1>
-              {currentUser && (
-                <div style={{display:'flex',alignItems:'center',gap:'0.75rem',padding:'1rem',background:`${currentUser.color}15`,borderRadius:'0.75rem',border:`2px solid ${currentUser.color}`,marginBottom:'1rem'}}>
-                  <div style={{width:'48px',height:'48px',borderRadius:'50%',background:currentUser.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',position:'relative'}}>
-                    {currentUser.name.charAt(0)}
-                    {trackingEnabled && (
-                      <div style={{position:'absolute',top:'-4px',right:'-4px',width:'16px',height:'16px',background:'#10b981',border:'3px solid white',borderRadius:'50%'}}></div>
-                    )}
+      {showUserManagement && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
+          <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'500px',width:'100%',maxHeight:'80vh',overflowY:'auto'}}>
+            <h3 style={{fontSize:'1.5rem',fontWeight:'bold',marginBottom:'1rem'}}>Manage Team</h3>
+            <div style={{marginBottom:'1.5rem'}}>
+              {teamMembers.map(member => (
+                <div key={member.id} style={{padding:'1rem',marginBottom:'0.75rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',display:'flex',alignItems:'center',gap:'1rem'}}>
+                  <div style={{width:'48px',height:'48px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem'}}>
+                    {member.name.charAt(0)}
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:'600'}}>{currentUser.name}</div>
-                    <div style={{fontSize:'0.75rem',color:'#64748b'}}>
-                      {trackingEnabled ? '📍 Tracking Active' : '📍 Tracking Off'}
-                    </div>
+                    <div style={{fontWeight:'600',fontSize:'1.125rem'}}>{member.name}</div>
+                    <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.role}</div>
                   </div>
-                  <button onClick={() => setCurrentUser(null)} style={{padding:'0.5rem',fontSize:'0.75rem',background:'white',border:'1px solid #e2e8f0',borderRadius:'0.5rem',cursor:'pointer'}}>Switch</button>
-                </div>
-              )}
-
-              <div style={{padding:'1rem',background:trackingEnabled?'#dcfce7':'#fee2e2',borderRadius:'0.75rem',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'0.5rem'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem'}}>
-                    <span style={{fontSize:'1.25rem'}}>📍</span>
-                    <b style={{fontSize:'0.875rem'}}>GPS Tracking</b>
-                  </div>
-                  <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',fontSize:'0.75rem',cursor:'pointer'}}>
-                    {trackingEnabled ? 'Stop' : 'Start'}
+                  <button onClick={() => deleteUser(member.id)} style={{padding:'0.5rem 1rem',background:'#ef4444',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'0.875rem'}}>
+                    Delete
                   </button>
                 </div>
-                <p style={{fontSize:'0.75rem',color:'#64748b'}}>
-                  {trackingEnabled ? 'Location verification active' : 'Enable to verify pins'}
-                </p>
-              </div>
-            </div>
-
-            <div style={{display:'flex',borderBottom:'2px solid #e2e8f0'}}>
-              {[['map','🗺️'],['leaderboard','🏆'],['live','📡']].map(([tab,icon]) => (
-                <button key={tab} onClick={() => setActiveTab(tab)} className={`tab ${activeTab === tab ? 'active' : ''}`} style={{flex:1,textAlign:'center'}}>
-                  {icon}
-                </button>
               ))}
             </div>
-
-            <div style={{flex:1,overflowY:'auto',padding:'1rem'}}>
-              {activeTab === 'map' && (
-                <>
-                  <div style={{marginBottom:'1.5rem'}}>
-                    <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>Mode</label>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem'}}>
-                      {[['drop-pin','📍 Pin'],['draw-zone','✏️ Zone'],['select','👆 Select']].map(([m,label]) => (
-                        <button key={m} onClick={()=>setMode(m)} style={{padding:'0.75rem 0.5rem',borderRadius:'0.5rem',border:'none',cursor:'pointer',background:mode===m?'#2563eb':'#f1f5f9',color:mode===m?'white':'#475569',fontSize:'0.875rem',fontWeight:'600'}}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {mode === "drop-pin" && (
-                    <div style={{padding:'1rem',background:'#dbeafe',borderRadius:'0.75rem',marginBottom:'1rem'}}>
-                      <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.75rem'}}>Status</label>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
-                        {[['knocked','✅','#16a34a'],['flyer','📬','#2563eb'],['skipped','⏭️','#ea580c']].map(([s,icon,color]) => (
-                          <button key={s} onClick={()=>setStatus(s)} style={{padding:'0.75rem',borderRadius:'0.5rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#475569',fontSize:'1.5rem',cursor:'pointer'}}>
-                            {icon}
-                          </button>
-                        ))}
-                      </div>
-                      <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note" style={{width:'100%',padding:'0.75rem',border:'2px solid #93c5fd',borderRadius:'0.5rem',fontSize:'0.875rem'}} />
-                      {!trackingEnabled && (
-                        <p style={{marginTop:'0.5rem',fontSize:'0.75rem',color:'#ef4444',fontWeight:'600'}}>⚠️ Enable GPS to verify</p>
-                      )}
-                    </div>
-                  )}
-
-                  <div style={{padding:'1rem',background:'#f8fafc',borderRadius:'0.75rem'}}>
-                    <h3 style={{fontSize:'1rem',fontWeight:'600',marginBottom:'0.75rem'}}>Verification</h3>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.75rem',marginBottom:'1rem'}}>
-                      <div style={{textAlign:'center',padding:'0.75rem',background:'white',borderRadius:'0.5rem',border:'2px solid #10b981'}}>
-                        <div style={{fontSize:'1.5rem',fontWeight:'bold',color:'#10b981'}}>{stats.verified}</div>
-                        <div style={{fontSize:'0.75rem',color:'#64748b'}}>✅ Verified</div>
-                      </div>
-                      <div style={{textAlign:'center',padding:'0.75rem',background:'white',borderRadius:'0.5rem',border:'2px solid #ef4444'}}>
-                        <div style={{fontSize:'1.5rem',fontWeight:'bold',color:'#ef4444'}}>{stats.suspicious}</div>
-                        <div style={{fontSize:'0.75rem',color:'#64748b'}}>🚫 Suspicious</div>
-                      </div>
-                    </div>
-                    <div style={{fontSize:'0.875rem',color:'#64748b'}}>
-                      📍 {stats.totalPins} total pins<br/>
-                      🗺️ {zones.length} zones<br/>
-                      👥 {stats.onlineUsers} online
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'leaderboard' && <LeaderboardView />}
-
-              {activeTab === 'live' && (
-                <div style={{padding:'1rem'}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
-                    <h2 style={{fontSize:'1.25rem',fontWeight:'bold'}}>📡 Live Tracking</h2>
-                    <button onClick={() => setShowLiveTracking(!showLiveTracking)} style={{padding:'0.5rem 1rem',background:showLiveTracking?'#10b981':'#e2e8f0',color:showLiveTracking?'white':'#64748b',border:'none',borderRadius:'0.5rem',fontWeight:'600',fontSize:'0.875rem',cursor:'pointer'}}>
-                      {showLiveTracking ? 'Showing' : 'Hidden'}
-                    </button>
-                  </div>
-
-                  <div style={{marginBottom:'1.5rem',padding:'1rem',background:'#f0fdf4',borderRadius:'1rem',border:'2px solid #10b981'}}>
-                    <div style={{fontSize:'1.5rem',fontWeight:'bold',color:'#10b981',marginBottom:'0.25rem'}}>
-                      {stats.onlineUsers}
-                    </div>
-                    <div style={{fontSize:'0.875rem',color:'#166534',fontWeight:'600'}}>
-                      Team members online
-                    </div>
-                  </div>
-
-                  <div style={{display:'flex',flexDirection:'column',gap:'0.75rem'}}>
-                    {leaderboard.map(member => {
-                      const isCurrentUser = member.id === currentUser?.id;
-                      return (
-                        <div key={member.id} style={{padding:'1rem',background:isCurrentUser?`${member.color}15`:'white',borderRadius:'0.75rem',border:`2px solid ${isCurrentUser?member.color:'#e2e8f0'}`,display:'flex',alignItems:'center',gap:'1rem'}}>
-                          <div style={{width:'48px',height:'48px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',position:'relative'}}>
-                            {member.name.charAt(0)}
-                            {member.isOnline && (
-                              <div style={{position:'absolute',top:'-4px',right:'-4px',width:'16px',height:'16px',background:'#10b981',border:'3px solid white',borderRadius:'50%'}}></div>
-                            )}
-                          </div>
-                          <div style={{flex:1}}>
-                            <div style={{fontWeight:'600',fontSize:'0.875rem',marginBottom:'0.25rem'}}>
-                              {member.name} {isCurrentUser && '(You)'}
-                            </div>
-                            {member.isOnline ? (
-                              <div style={{fontSize:'0.75rem',color:'#10b981',fontWeight:'600'}}>● ONLINE</div>
-                            ) : (
-                              <div style={{fontSize:'0.75rem',color:'#64748b'}}>Offline</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{flex:1,borderRadius:'0.75rem',overflow:'hidden',boxShadow:'0 4px 6px rgba(0,0,0,0.1)',position:'relative'}}>
-            <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
+            <button onClick={() => setShowUserModal(true)} style={{width:'100%',padding:'0.75rem',background:'#2563eb',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem',marginBottom:'0.5rem'}}>
+              ➕ Add New Member
+            </button>
+            <button onClick={() => setShowUserManagement(false)} style={{width:'100%',padding:'0.75rem',background:'#e2e8f0',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem'}}>
+              Close
+            </button>
           </div>
         </div>
       )}
 
-      <div style={{position:'fixed',bottom:'1rem',right:'1rem',background:'white',padding:'0.5rem 1rem',borderRadius:'2rem',boxShadow:'0 2px 8px rgba(0,0,0,0.1)',fontSize:'0.75rem',color:'#10b981',fontWeight:'600',zIndex:998}}>
-        ☁️ Synced • {stats.onlineUsers} online
+      {selectedZoneForAssignment && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
+          <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
+            <h3 style={{fontSize:'1.25rem',fontWeight:'bold',marginBottom:'1rem'}}>Assign {selectedZoneForAssignment.name}</h3>
+            <p style={{color:'#64748b',marginBottom:'1rem',fontSize:'0.875rem'}}>Select a team member to assign this zone to:</p>
+            <div style={{marginBottom:'1rem'}}>
+              {teamMembers.map(member => (
+                <div key={member.id} onClick={() => assignZoneToUser(selectedZoneForAssignment.id, member.id)} style={{padding:'1rem',marginBottom:'0.5rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'1rem'}} onMouseEnter={e => e.currentTarget.style.borderColor = member.color} onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                  <div style={{width:'40px',height:'40px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.125rem'}}>
+                    {member.name.charAt(0)}
+                  </div>
+                  <div style={{fontWeight:'600'}}>{member.name}</div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setSelectedZoneForAssignment(null)} style={{width:'100%',padding:'0.75rem',background:'#e2e8f0',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer'}}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{position:'fixed',top:0,left:0,right:0,bottom:0}}>
+        <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
       </div>
+
+      <div style={{position:'fixed',bottom:'1rem',left:'1rem',background:'white',padding:'1rem',borderRadius:'0.75rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:998,maxWidth:'300px'}}>
+        <div style={{fontWeight:'600',marginBottom:'0.5rem',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span>{currentUser?.name || 'Guest'}</span>
+          <button onClick={() => setShowUserManagement(true)} style={{padding:'0.5rem',background:'#f1f5f9',border:'none',borderRadius:'0.5rem',cursor:'pointer',fontSize:'0.875rem',fontWeight:'600'}}>
+            👥 Manage
+          </button>
+        </div>
+        
+        <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{width:'100%',padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',cursor:'pointer',marginBottom:'0.75rem',fontWeight:'600',fontSize:'0.875rem'}}>
+          {trackingEnabled ? 'Stop GPS' : 'Start GPS'}
+        </button>
+
+        <div style={{fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>Mode</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
+          {[['drop-pin','📍'],['draw-zone','✏️'],['select','🎯']].map(([m,icon]) => (
+            <button key={m} onClick={()=>setMode(m)} style={{padding:'0.75rem',borderRadius:'0.5rem',border:'none',background:mode===m?'#2563eb':'#f1f5f9',color:mode===m?'white':'#475569',fontSize:'1.25rem',cursor:'pointer'}}>
+              {icon}
+            </button>
+          ))}
+        </div>
+
+        {mode === "drop-pin" && (
+          <div style={{padding:'0.75rem',background:'#dbeafe',borderRadius:'0.5rem',marginBottom:'0.75rem'}}>
+            <div style={{fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>Lead Type</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
+              {Object.entries(LEAD_TYPES).slice(0, 3).map(([key, type]) => (
+                <button key={key} onClick={()=>setStatus(key)} style={{padding:'0.75rem 0.5rem',borderRadius:'0.5rem',border:status===key?'none':'2px solid #bfdbfe',background:status===key?type.color:'white',color:status===key?'white':'#475569',fontSize:'1.25rem',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem'}}>
+                  <div>{type.icon}</div>
+                  <div style={{fontSize:'0.625rem',fontWeight:'600'}}>{type.shortLabel}</div>
+                </button>
+              ))}
+            </div>
+            <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note" style={{width:'100%',padding:'0.5rem',border:'2px solid #93c5fd',borderRadius:'0.5rem',fontSize:'0.875rem'}} />
+          </div>
+        )}
+
+        <div style={{fontSize:'0.75rem',color:'#64748b'}}>
+          💰 {stats.estimates} estimates | 📞 {stats.callbacks} callbacks | ✅ {stats.verified} verified
+        </div>
+      </div>
+
+      <button onClick={() => setCurrentUser(null)} style={{position:'fixed',top:'1rem',left:'1rem',padding:'0.5rem 1rem',background:'white',border:'2px solid #e2e8f0',borderRadius:'0.5rem',cursor:'pointer',zIndex:999,fontWeight:'600'}}>
+        Switch User
+      </button>
     </div>
   );
 }
