@@ -169,7 +169,6 @@
     }
   }
   
-  /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 8px;
   }
@@ -255,11 +254,11 @@ function getGPSAge(location) {
   return Math.floor((Date.now() - location.timestamp) / 1000);
 }
 
-// 🏠 ADDRESS SNAPPING - Reverse Geocoding with Nominatim
-async function reverseGeocode(lat, lng) {
+// 🏠 SNAP TO BUILDING - Gets building coordinates (not street)
+async function snapToBuilding(lat, lng) {
   try {
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
       {
         headers: {
           'User-Agent': 'RepZone Door Knocking App'
@@ -271,42 +270,15 @@ async function reverseGeocode(lat, lng) {
     
     const data = await response.json();
     
-    if (!data || !data.address) return null;
+    if (!data) return null;
     
-    const addr = data.address;
-    const houseNumber = addr.house_number || '';
-    const road = addr.road || addr.street || '';
-    const city = addr.city || addr.town || addr.village || '';
-    const state = addr.state || '';
-    const postcode = addr.postcode || '';
-    
-    // Build full address
-    let fullAddress = '';
-    if (houseNumber && road) {
-      fullAddress = `${houseNumber} ${road}`;
-      if (city) fullAddress += `, ${city}`;
-      if (state) fullAddress += `, ${state}`;
-      if (postcode) fullAddress += ` ${postcode}`;
-    } else if (road) {
-      fullAddress = road;
-      if (city) fullAddress += `, ${city}`;
-    } else {
-      fullAddress = 'Unknown Address';
-    }
-    
+    // Return snapped coordinates (building location)
     return {
-      address: fullAddress,
-      houseNumber,
-      street: road,
-      city,
-      state,
-      postcode,
       lat: parseFloat(data.lat),
-      lng: parseFloat(data.lon),
-      displayName: data.display_name
+      lng: parseFloat(data.lon)
     };
   } catch (error) {
-    console.error('Geocoding error:', error);
+    console.error('Snap error:', error);
     return null;
   }
 }
@@ -338,7 +310,7 @@ function RepZoneApp() {
   const [showLiveTracking, setShowLiveTracking] = useState(true);
   const [toastMessage, setToastMessage] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [geocoding, setGeocoding] = useState(false);
+  const [snapping, setSnapping] = useState(false);
   
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -680,9 +652,8 @@ function RepZoneApp() {
 
       return { ...member, knockCount: count, isOnline, liveLocation };
     }).sort((a, b) => b.knockCount - a.knockCount);
-  }
-
-  useEffect(() => {
+  } 
+ useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current || loading) return;
     
     const map = L.map(mapRef.current, {
@@ -732,24 +703,19 @@ function RepZoneApp() {
         }
 
         setSaving(true);
-        setGeocoding(true);
+        setSnapping(true);
 
         try {
-          // 🏠 GET ADDRESS FROM COORDINATES
-          const addressData = await reverseGeocode(lat, lng);
+          // 🏠 SNAP TO BUILDING (not street!)
+          const snapped = await snapToBuilding(lat, lng);
           
           let finalLat = lat;
           let finalLng = lng;
-          let address = 'Address not found';
           
-          if (addressData) {
-            finalLat = addressData.lat;
-            finalLng = addressData.lng;
-            address = addressData.address;
-            
-            showToast(`📍 Found address: ${address}`, 3000);
-          } else {
-            showToast('⚠️ Could not find address, using clicked location', 3000);
+          if (snapped) {
+            finalLat = snapped.lat;
+            finalLng = snapped.lng;
+            showToast('📍 Snapped to building!', 2000);
           }
 
           const distance = calculateDistance(currentLocation.lat, currentLocation.lng, finalLat, finalLng);
@@ -764,7 +730,6 @@ function RepZoneApp() {
             lat: finalLat, 
             lng: finalLng, 
             status,
-            address: address, // 🏠 STORE ADDRESS
             rep_name: currentUser.name,
             team_member_id: currentUser.id,
             zone_id: clickedZone?.id || null,
@@ -787,7 +752,7 @@ function RepZoneApp() {
             const leadTypeLabel = LEAD_TYPES[status]?.label || status;
             const gpsAge = getGPSAge(currentLocation);
             if (verification.status === 'verified') {
-              showToast(`✅ ${leadTypeLabel} saved at ${address}! (${Math.round(distance)}ft, GPS: ${gpsAge}s)`, 5000);
+              showToast(`✅ ${leadTypeLabel} saved! (${Math.round(distance)}ft, GPS: ${gpsAge}s)`, 5000);
             } else if (verification.status === 'suspicious') {
               showToast(`⚠️ ${leadTypeLabel} saved but ${Math.round(distance)}ft away - marked suspicious`, 5000);
             } else {
@@ -799,7 +764,7 @@ function RepZoneApp() {
         }
         
         setSaving(false);
-        setGeocoding(false);
+        setSnapping(false);
       } else if (mode === "draw-zone") {
         if (currentUser?.role !== 'admin') {
           showToast('⚠️ Only admins can create zones!');
@@ -876,7 +841,7 @@ function RepZoneApp() {
         }
 
         polygon.bindPopup(`
-          <div style="padding:12px;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+          <div style="padding:12px;min-width:180px;font-family:-apple-system,sans-serif">
             <b style="font-size:17px;color:#1e293b">${zone.name}</b><br>
             <div style="margin-top:8px">
               ${assigned ? `<span style="color:${assigned.color};font-weight:600;font-size:15px">👤 ${assigned.name}</span>` : '<span style="color:#64748b;font-weight:600">⚠️ Unassigned</span>'}
@@ -904,9 +869,9 @@ function RepZoneApp() {
       const leadType = LEAD_TYPES[pin.status] || LEAD_TYPES.knocked;
       const verification = pin.verification_status ? getVerificationStatus(pin.distance_from_pin || 0) : null;
       
-      // 🎨 MODERN PIN ICON with bigger size and better shadow
+      // 🎨 BIGGER, MODERN PIN MARKERS (44px)
       const icon = L.divIcon({
-        html: `<div style="background:${user?.color || '#64748b'};width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;border:4px solid ${verification ? verification.color : 'white'};box-shadow:0 4px 12px rgba(0,0,0,0.25);position:relative;transition:all 0.3s">${leadType.display}${verification ? `<div style="position:absolute;top:-10px;right:-10px;background:${verification.color};color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:14px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.2)">${verification.icon}</div>` : ''}</div>`,
+        html: `<div style="background:${user?.color || '#64748b'};width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;border:4px solid ${verification ? verification.color : 'white'};box-shadow:0 4px 12px rgba(0,0,0,0.25);position:relative">${leadType.display}${verification ? `<div style="position:absolute;top:-10px;right:-10px;background:${verification.color};color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:14px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.2)">${verification.icon}</div>` : ''}</div>`,
         iconSize: [44, 44],
         iconAnchor: [22, 44]
       });
@@ -914,22 +879,15 @@ function RepZoneApp() {
       const marker = L.marker([pin.lat, pin.lng], { icon });
       marker.addTo(pinLayerRef.current);
       
-      // 🎨 MODERN POPUP with gradient and better layout
+      // 🎨 BEAUTIFUL GRADIENT POPUPS
       marker.bindPopup(`
-        <div style="min-width:240px;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border-radius:12px;overflow:hidden">
+        <div style="min-width:240px;padding:0;font-family:-apple-system,sans-serif;border-radius:12px;overflow:hidden">
           <div style="background:linear-gradient(135deg, ${leadType.color} 0%, ${leadType.color}dd 100%);padding:16px;color:white">
             <div style="font-size:24px;margin-bottom:4px">${leadType.icon}</div>
             <div style="font-size:18px;font-weight:700">${leadType.label}</div>
           </div>
           
           <div style="padding:16px;background:white">
-            ${pin.address ? `
-              <div style="padding:10px;background:#f8fafc;border-left:4px solid #3b82f6;margin-bottom:12px;border-radius:6px">
-                <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:4px">📍 ADDRESS</div>
-                <div style="font-weight:600;color:#1e293b;font-size:14px">${pin.address}</div>
-              </div>
-            ` : ''}
-            
             <div style="padding:10px;background:${user?.color || '#64748b'}15;border-left:4px solid ${user?.color || '#64748b'};margin-bottom:12px;border-radius:6px">
               <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:4px">👤 REP</div>
               <div style="font-weight:700;color:${user?.color || '#64748b'};font-size:14px">${pin.rep_name || 'Unknown'}</div>
@@ -973,8 +931,7 @@ function RepZoneApp() {
           </div>
         </div>
       `, {
-        maxWidth: 280,
-        className: 'modern-popup'
+        maxWidth: 280
       });
     });
   }, [pins, filter, teamMembers, mapReady]);
@@ -1040,7 +997,7 @@ function RepZoneApp() {
       const isFresh = isGPSFresh(currentLocation);
       
       const youIcon = L.divIcon({
-        html: `<div style="background:${currentUser.color};width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.5rem;border:5px solid white;box-shadow:0 6px 20px rgba(0,0,0,0.3);position:relative;animation:pulse 2s infinite">${currentUser.name.charAt(0)}<div style="position:absolute;top:-8px;right:-8px;width:20px;height:20px;background:${isFresh ? '#10b981' : '#f59e0b'};border:4px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.2)"></div></div>`,
+        html: `<div style="background:${currentUser.color};width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.5rem;border:5px solid white;box-shadow:0 6px 20px rgba(0,0,0,0.3);position:relative">${currentUser.name.charAt(0)}<div style="position:absolute;top:-8px;right:-8px;width:20px;height:20px;background:${isFresh ? '#10b981' : '#f59e0b'};border:4px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.2)"></div></div>`,
         iconSize: [56, 56],
         iconAnchor: [28, 28]
       });
@@ -1184,8 +1141,6 @@ function RepZoneApp() {
       )}
     </div>
   );
-
-  // [CONTINUED IN NEXT MESSAGE - Code is too long!]
  const MobileDropdownContent = () => (
     <div style={{padding:'1rem',paddingTop:'5rem'}}>
       {currentUser && (
@@ -1280,10 +1235,10 @@ function RepZoneApp() {
     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#f8fafc'}}>
       {toastMessage && <div className="toast">{toastMessage}</div>}
 
-      {(saving || geocoding) && (
+      {(saving || snapping) && (
         <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',padding:'2rem 2.5rem',borderRadius:'1.5rem',boxShadow:'0 20px 40px rgba(0,0,0,0.2)',zIndex:10001,display:'flex',flexDirection:'column',gap:'1rem',alignItems:'center'}}>
           <div className="spinner" style={{width:'40px',height:'40px',borderWidth:'4px',borderTopColor:'#3b82f6'}}></div>
-          <span style={{fontWeight:'700',fontSize:'1.125rem',color:'#1e293b'}}>{geocoding ? '🏠 Finding Address...' : '💾 Saving...'}</span>
+          <span style={{fontWeight:'700',fontSize:'1.125rem',color:'#1e293b'}}>{snapping ? '🏠 Snapping to Building...' : '💾 Saving...'}</span>
         </div>
       )}
 
@@ -1474,7 +1429,7 @@ function RepZoneApp() {
                       <p style={{fontSize:'0.8125rem',color:'#64748b',marginTop:'0.75rem',fontWeight:'600'}}>💡 Click on a zone to assign or delete it</p>
                     )}
                     {mode === "drop-pin" && (
-                      <p style={{fontSize:'0.8125rem',color:'#10b981',marginTop:'0.75rem',fontWeight:'700'}}>✅ Click map to drop pins at addresses!</p>
+                      <p style={{fontSize:'0.8125rem',color:'#10b981',marginTop:'0.75rem',fontWeight:'700'}}>✅ Click map - pins snap to buildings!</p>
                     )}
                   </div>
 
