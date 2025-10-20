@@ -9,9 +9,10 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; width: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  html, body { height: 100%; width: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif; }
   .leaflet-container { height: 100% !important; width: 100% !important; touch-action: pan-x pan-y; }
-  .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
+  
+  .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
   @keyframes bounce {
@@ -22,12 +23,49 @@
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
   }
+  @keyframes slideIn { 
+    from { transform: translateX(400px); opacity: 0; } 
+    to { transform: translateX(0); opacity: 1; } 
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
   .tracking-indicator { animation: pulse 2s infinite; }
-  .tab { padding: 0.75rem 1rem; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; transition: all 0.2s; }
-  .tab.active { border-bottom-color: #2563eb; color: #2563eb; }
+  .tab { padding: 0.875rem 1.25rem; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600; transition: all 0.3s; font-size: 0.9375rem; }
+  .tab.active { border-bottom-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
   .tab:hover { background: #f1f5f9; }
-  .toast { position: fixed; top: 5rem; right: 1rem; background: white; padding: 1rem 1.5rem; border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 10001; animation: slideIn 0.3s ease; max-width: 400px; }
-  @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .toast { position: fixed; top: 5rem; right: 1rem; background: white; padding: 1rem 1.5rem; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 10001; animation: slideIn 0.3s ease; max-width: 400px; border-left: 4px solid #3b82f6; }
+  
+  .stat-card {
+    background: white;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    transition: all 0.3s;
+    border: 1px solid #e5e7eb;
+  }
+  
+  .stat-card:hover {
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+  }
+  
+  .modern-button {
+    transition: all 0.2s;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  
+  .modern-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  
+  .modern-button:active {
+    transform: translateY(0);
+  }
   
   .hamburger-btn {
     display: none;
@@ -38,14 +76,19 @@
     height: 54px;
     background: white;
     border: none;
-    border-radius: 0.75rem;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    border-radius: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     cursor: pointer;
     z-index: 1002;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 5px;
+    transition: all 0.3s;
+  }
+  
+  .hamburger-btn:hover {
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
   }
   
   .hamburger-btn span {
@@ -125,6 +168,24 @@
       display: flex !important;
     }
   }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
 </style>
 </head>
 <body>
@@ -153,7 +214,6 @@ const LEAD_TYPES = {
   skipped: { icon: '⏭️', label: 'Skipped', color: '#ef4444', display: '⏭️' }
 };
 
-// 🚀 GPS FRESHNESS - Max age for GPS data (30 seconds)
 const GPS_MAX_AGE_MS = 30000;
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -184,7 +244,6 @@ function isPointInPolygon(point, polygon) {
   return inside;
 }
 
-// 🚀 GPS FRESHNESS CHECK
 function isGPSFresh(location) {
   if (!location || !location.timestamp) return false;
   const age = Date.now() - location.timestamp;
@@ -194,6 +253,62 @@ function isGPSFresh(location) {
 function getGPSAge(location) {
   if (!location || !location.timestamp) return null;
   return Math.floor((Date.now() - location.timestamp) / 1000);
+}
+
+// 🏠 ADDRESS SNAPPING - Reverse Geocoding with Nominatim
+async function reverseGeocode(lat, lng) {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+      {
+        headers: {
+          'User-Agent': 'RepZone Door Knocking App'
+        }
+      }
+    );
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    
+    if (!data || !data.address) return null;
+    
+    const addr = data.address;
+    const houseNumber = addr.house_number || '';
+    const road = addr.road || addr.street || '';
+    const city = addr.city || addr.town || addr.village || '';
+    const state = addr.state || '';
+    const postcode = addr.postcode || '';
+    
+    // Build full address
+    let fullAddress = '';
+    if (houseNumber && road) {
+      fullAddress = `${houseNumber} ${road}`;
+      if (city) fullAddress += `, ${city}`;
+      if (state) fullAddress += `, ${state}`;
+      if (postcode) fullAddress += ` ${postcode}`;
+    } else if (road) {
+      fullAddress = road;
+      if (city) fullAddress += `, ${city}`;
+    } else {
+      fullAddress = 'Unknown Address';
+    }
+    
+    return {
+      address: fullAddress,
+      houseNumber,
+      street: road,
+      city,
+      state,
+      postcode,
+      lat: parseFloat(data.lat),
+      lng: parseFloat(data.lon),
+      displayName: data.display_name
+    };
+  } catch (error) {
+    console.error('Geocoding error:', error);
+    return null;
+  }
 }
 
 function RepZoneApp() {
@@ -223,6 +338,7 @@ function RepZoneApp() {
   const [showLiveTracking, setShowLiveTracking] = useState(true);
   const [toastMessage, setToastMessage] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
   
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -302,12 +418,11 @@ function RepZoneApp() {
     setTrackingEnabled(true);
     locationWatchId.current = navigator.geolocation.watchPosition(
       (position) => {
-        // 🚀 GPS FRESHNESS - Add timestamp to location data
         setCurrentLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy,
-          timestamp: Date.now() // Track when GPS was obtained
+          timestamp: Date.now()
         });
       },
       () => {},
@@ -385,7 +500,7 @@ function RepZoneApp() {
       await setSupabaseUser(currentUser.id);
       await supabase.current.from('pins').delete().eq('id', pinId);
       setPins(prev => prev.filter(p => p.id !== pinId));
-      showToast('Pin deleted!');
+      showToast('✅ Pin deleted successfully!');
     } catch (e) {
       showToast('❌ Error deleting pin: ' + e.message);
     }
@@ -398,7 +513,7 @@ function RepZoneApp() {
       await setSupabaseUser(currentUser.id);
       await supabase.current.from('pins').update({ status: newStatus }).eq('id', pinId);
       setPins(prev => prev.map(p => p.id === pinId ? {...p, status: newStatus} : p));
-      showToast(`Updated to ${LEAD_TYPES[newStatus]?.label || newStatus}!`);
+      showToast(`✅ Updated to ${LEAD_TYPES[newStatus]?.label || newStatus}!`);
     } catch (e) {
       showToast('❌ Error updating pin: ' + e.message);
     }
@@ -416,7 +531,7 @@ function RepZoneApp() {
       await supabase.current.from('team_members').delete().eq('id', userId);
       setTeamMembers(prev => prev.filter(u => u.id !== userId));
       if (currentUser?.id === userId) setCurrentUser(null);
-      showToast('User deleted!');
+      showToast('✅ User deleted!');
     } catch (e) {
       showToast('❌ Error deleting user: ' + e.message);
     }
@@ -438,7 +553,7 @@ function RepZoneApp() {
         localStorage.setItem('current_user_id', JSON.stringify(updatedUser));
       }
       setEditingUser(null);
-      showToast(`Role updated to ${newRole}!`);
+      showToast(`✅ Role updated to ${newRole}!`);
     } catch (e) {
       showToast('❌ Error updating role: ' + e.message);
     }
@@ -459,7 +574,7 @@ function RepZoneApp() {
       }).eq('id', zoneId);
       setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: userId, color: member?.color} : z));
       setSelectedZone(null);
-      showToast(`Zone assigned to ${member.name}!`);
+      showToast(`✅ Zone assigned to ${member.name}!`);
     } catch (e) {
       showToast('❌ Error assigning zone: ' + e.message);
     }
@@ -476,7 +591,7 @@ function RepZoneApp() {
       await supabase.current.from('zones').update({ assigned_to: null }).eq('id', zoneId);
       setZones(prev => prev.map(z => z.id === zoneId ? {...z, assigned_to: null} : z));
       setSelectedZone(null);
-      showToast('Zone unassigned!');
+      showToast('✅ Zone unassigned!');
     } catch (e) {
       showToast('❌ Error unassigning zone: ' + e.message);
     }
@@ -494,7 +609,7 @@ function RepZoneApp() {
       await supabase.current.from('zones').delete().eq('id', zoneId);
       setZones(prev => prev.filter(z => z.id !== zoneId));
       setSelectedZone(null);
-      showToast('Zone deleted!');
+      showToast('✅ Zone deleted!');
     } catch (e) {
       showToast('❌ Error deleting zone: ' + e.message);
     }
@@ -531,7 +646,7 @@ function RepZoneApp() {
       setNewUserName("");
       setNewUserRole("rep");
       setShowUserModal(false);
-      showToast(`${newUserName} added as ${newUserRole}!`);
+      showToast(`✅ ${newUserName} added as ${newUserRole}!`);
     } catch (e) {
       showToast('❌ Error adding team member: ' + e.message);
     }
@@ -610,7 +725,6 @@ function RepZoneApp() {
           return;
         }
 
-        // 🚀 GPS FRESHNESS CHECK - Validate GPS data is fresh
         if (!isGPSFresh(currentLocation)) {
           const age = getGPSAge(currentLocation);
           showToast(`⚠️ GPS data is ${age}s old! Move around to get fresh GPS signal, then try again.`, 6000);
@@ -618,18 +732,39 @@ function RepZoneApp() {
         }
 
         setSaving(true);
+        setGeocoding(true);
 
         try {
-          const distance = calculateDistance(currentLocation.lat, currentLocation.lng, lat, lng);
+          // 🏠 GET ADDRESS FROM COORDINATES
+          const addressData = await reverseGeocode(lat, lng);
+          
+          let finalLat = lat;
+          let finalLng = lng;
+          let address = 'Address not found';
+          
+          if (addressData) {
+            finalLat = addressData.lat;
+            finalLng = addressData.lng;
+            address = addressData.address;
+            
+            showToast(`📍 Found address: ${address}`, 3000);
+          } else {
+            showToast('⚠️ Could not find address, using clicked location', 3000);
+          }
+
+          const distance = calculateDistance(currentLocation.lat, currentLocation.lng, finalLat, finalLng);
           const verification = getVerificationStatus(distance);
           const clickedZone = zones.find(z => {
             if (!z.points || z.points.length < 3) return false;
-            return isPointInPolygon([lat, lng], z.points);
+            return isPointInPolygon([finalLat, finalLng], z.points);
           });
 
           const newPin = {
             id: `pin-${Date.now()}`,
-            lat, lng, status,
+            lat: finalLat, 
+            lng: finalLng, 
+            status,
+            address: address, // 🏠 STORE ADDRESS
             rep_name: currentUser.name,
             team_member_id: currentUser.id,
             zone_id: clickedZone?.id || null,
@@ -652,11 +787,11 @@ function RepZoneApp() {
             const leadTypeLabel = LEAD_TYPES[status]?.label || status;
             const gpsAge = getGPSAge(currentLocation);
             if (verification.status === 'verified') {
-              showToast(`✅ ${leadTypeLabel} saved! (Verified - ${Math.round(distance)}ft, GPS: ${gpsAge}s old)`);
+              showToast(`✅ ${leadTypeLabel} saved at ${address}! (${Math.round(distance)}ft, GPS: ${gpsAge}s)`, 5000);
             } else if (verification.status === 'suspicious') {
-              showToast(`⚠️ ${leadTypeLabel} saved! (${Math.round(distance)}ft away - marked suspicious)`);
+              showToast(`⚠️ ${leadTypeLabel} saved but ${Math.round(distance)}ft away - marked suspicious`, 5000);
             } else {
-              showToast(`⚠️ ${leadTypeLabel} saved! (${Math.round(distance)}ft - questionable)`);
+              showToast(`⚠️ ${leadTypeLabel} saved (${Math.round(distance)}ft - questionable)`, 5000);
             }
           }
         } catch (error) {
@@ -664,6 +799,7 @@ function RepZoneApp() {
         }
         
         setSaving(false);
+        setGeocoding(false);
       } else if (mode === "draw-zone") {
         if (currentUser?.role !== 'admin') {
           showToast('⚠️ Only admins can create zones!');
@@ -692,7 +828,7 @@ function RepZoneApp() {
             };
             await supabase.current.from('zones').insert([newZone]);
             setZones(prev => [...prev, newZone]);
-            showToast('Zone point added! Double-click to finish.');
+            showToast('📍 Zone point added! Double-click to finish.');
           }
           setActiveZoneId(id);
         } catch (error) {
@@ -706,7 +842,7 @@ function RepZoneApp() {
       if (mode === "draw-zone" && activeZoneId) {
         setActiveZoneId(null);
         setMode("select");
-        showToast('Zone completed!');
+        showToast('✅ Zone completed!');
       }
     });
 
@@ -740,10 +876,12 @@ function RepZoneApp() {
         }
 
         polygon.bindPopup(`
-          <div style="padding:8px;min-width:150px">
-            <b style="font-size:16px">${zone.name}</b><br>
-            ${assigned ? `<span style="color:${assigned.color}">👤 ${assigned.name}</span>` : '⚠️ Unassigned'}
-            ${mode === "select" ? '<br><small style="color:#64748b">Click to manage</small>' : ''}
+          <div style="padding:12px;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+            <b style="font-size:17px;color:#1e293b">${zone.name}</b><br>
+            <div style="margin-top:8px">
+              ${assigned ? `<span style="color:${assigned.color};font-weight:600;font-size:15px">👤 ${assigned.name}</span>` : '<span style="color:#64748b;font-weight:600">⚠️ Unassigned</span>'}
+            </div>
+            ${mode === "select" ? '<div style="margin-top:8px;font-size:13px;color:#64748b">Click to manage zone</div>' : ''}
           </div>
         `);
       }
@@ -766,42 +904,78 @@ function RepZoneApp() {
       const leadType = LEAD_TYPES[pin.status] || LEAD_TYPES.knocked;
       const verification = pin.verification_status ? getVerificationStatus(pin.distance_from_pin || 0) : null;
       
+      // 🎨 MODERN PIN ICON with bigger size and better shadow
       const icon = L.divIcon({
-        html: `<div style="background:${user?.color || '#64748b'};width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid ${verification ? verification.color : 'white'};box-shadow:0 2px 8px rgba(0,0,0,0.3);position:relative">${leadType.display}${verification ? `<div style="position:absolute;top:-8px;right:-8px;background:${verification.color};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white">${verification.icon}</div>` : ''}</div>`,
-        iconSize: [36, 36],
-        iconAnchor: [18, 36]
+        html: `<div style="background:${user?.color || '#64748b'};width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;border:4px solid ${verification ? verification.color : 'white'};box-shadow:0 4px 12px rgba(0,0,0,0.25);position:relative;transition:all 0.3s">${leadType.display}${verification ? `<div style="position:absolute;top:-10px;right:-10px;background:${verification.color};color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:14px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.2)">${verification.icon}</div>` : ''}</div>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 44]
       });
       
       const marker = L.marker([pin.lat, pin.lng], { icon });
       marker.addTo(pinLayerRef.current);
       
+      // 🎨 MODERN POPUP with gradient and better layout
       marker.bindPopup(`
-        <div style="min-width:200px;padding:12px">
-          <div style="font-size:18px;margin-bottom:8px">${leadType.icon} <b>${leadType.label}</b></div>
-          <div style="padding:8px;background:${user?.color || '#64748b'}22;border-left:3px solid ${user?.color || '#64748b'};margin-bottom:8px;border-radius:4px">
-            <b>👤 ${pin.rep_name || 'Unknown'}</b>
+        <div style="min-width:240px;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border-radius:12px;overflow:hidden">
+          <div style="background:linear-gradient(135deg, ${leadType.color} 0%, ${leadType.color}dd 100%);padding:16px;color:white">
+            <div style="font-size:24px;margin-bottom:4px">${leadType.icon}</div>
+            <div style="font-size:18px;font-weight:700">${leadType.label}</div>
           </div>
-          ${pin.note ? `<div style="font-size:13px;margin-bottom:8px;padding:8px;background:#f8fafc;border-radius:4px">📝 ${pin.note}</div>` : ''}
-          ${verification ? `
-            <div style="padding:8px;background:${verification.color}22;border-left:3px solid ${verification.color};margin-bottom:8px;border-radius:4px">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="font-size:20px">${verification.icon}</span>
-                <b style="color:${verification.color}">${verification.label}</b>
+          
+          <div style="padding:16px;background:white">
+            ${pin.address ? `
+              <div style="padding:10px;background:#f8fafc;border-left:4px solid #3b82f6;margin-bottom:12px;border-radius:6px">
+                <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:4px">📍 ADDRESS</div>
+                <div style="font-weight:600;color:#1e293b;font-size:14px">${pin.address}</div>
               </div>
-              <div style="font-size:12px;color:#64748b">
-                Distance: <b>${pin.distance_from_pin} feet</b>
-              </div>
+            ` : ''}
+            
+            <div style="padding:10px;background:${user?.color || '#64748b'}15;border-left:4px solid ${user?.color || '#64748b'};margin-bottom:12px;border-radius:6px">
+              <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:4px">👤 REP</div>
+              <div style="font-weight:700;color:${user?.color || '#64748b'};font-size:14px">${pin.rep_name || 'Unknown'}</div>
             </div>
-          ` : ''}
-          <small style="color:#64748b;display:block;margin-bottom:12px">${new Date(pin.created_at).toLocaleString()}</small>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
-            ${Object.entries(LEAD_TYPES).map(([key, type]) => `
-              <button onclick="window.updatePinStatusGlobal('${pin.id}','${key}')" style="flex:1;min-width:45px;padding:6px;background:${type.color};color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600">${type.display}</button>
-            `).join('')}
+            
+            ${pin.note ? `
+              <div style="padding:10px;background:#f8fafc;border-left:4px solid #64748b;margin-bottom:12px;border-radius:6px">
+                <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:4px">📝 NOTE</div>
+                <div style="color:#1e293b;font-size:13px">${pin.note}</div>
+              </div>
+            ` : ''}
+            
+            ${verification ? `
+              <div style="padding:12px;background:${verification.color}15;border-left:4px solid ${verification.color};margin-bottom:12px;border-radius:6px">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                  <span style="font-size:24px">${verification.icon}</span>
+                  <div>
+                    <div style="font-weight:700;color:${verification.color};font-size:15px">${verification.label}</div>
+                    <div style="font-size:13px;color:#64748b;margin-top:2px">Distance: <b>${pin.distance_from_pin} feet</b></div>
+                  </div>
+                </div>
+              </div>
+            ` : ''}
+            
+            <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;text-align:center">
+              ${new Date(pin.created_at).toLocaleString()}
+            </div>
+            
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
+              ${Object.entries(LEAD_TYPES).slice(0,3).map(([key, type]) => `
+                <button onclick="window.updatePinStatusGlobal('${pin.id}','${key}')" class="modern-button" style="padding:10px 6px;background:${type.color};color:white;border:none;border-radius:8px;font-size:16px;font-weight:700;box-shadow:0 2px 6px ${type.color}40">${type.display}</button>
+              `).join('')}
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
+              ${Object.entries(LEAD_TYPES).slice(3).map(([key, type]) => `
+                <button onclick="window.updatePinStatusGlobal('${pin.id}','${key}')" class="modern-button" style="padding:10px 6px;background:${type.color};color:white;border:none;border-radius:8px;font-size:16px;font-weight:700;box-shadow:0 2px 6px ${type.color}40">${type.display}</button>
+              `).join('')}
+            </div>
+            
+            <button onclick="window.deletePinGlobal('${pin.id}')" class="modern-button" style="width:100%;padding:12px;background:#ef4444;color:white;border:none;border-radius:10px;font-weight:700;font-size:14px;box-shadow:0 2px 8px rgba(239,68,68,0.3)">🗑️ Delete Pin</button>
           </div>
-          <button onclick="window.deletePinGlobal('${pin.id}')" style="width:100%;padding:8px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">🗑️ Delete Pin</button>
         </div>
-      `);
+      `, {
+        maxWidth: 280,
+        className: 'modern-popup'
+      });
     });
   }, [pins, filter, teamMembers, mapReady]);
 
@@ -818,7 +992,7 @@ function RepZoneApp() {
       const isRecent = minutesAgo < 5;
 
       const circle = L.circle([loc.lat, loc.lng], {
-        radius: 30,
+        radius: 35,
         color: member.color,
         fillColor: member.color,
         fillOpacity: isRecent ? 0.4 : 0.2,
@@ -829,14 +1003,19 @@ function RepZoneApp() {
       circle.addTo(liveLayerRef.current);
 
       const liveIcon = L.divIcon({
-        html: `<div style="background:${member.color};width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;border:4px solid white;box-shadow:0 2px 12px rgba(0,0,0,0.3);position:relative">${member.name.charAt(0)}${isRecent ? `<div style="position:absolute;top:-4px;right:-4px;width:12px;height:12px;background:#10b981;border:2px solid white;border-radius:50%"></div>` : ''}</div>`,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
+        html: `<div style="background:${member.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.25);position:relative">${member.name.charAt(0)}${isRecent ? `<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;background:#10b981;border:3px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(16,185,129,0.5)"></div>` : ''}</div>`,
+        iconSize: [48, 48],
+        iconAnchor: [24, 24]
       });
 
       const marker = L.marker([loc.lat, loc.lng], { icon: liveIcon });
       marker.addTo(liveLayerRef.current);
-      marker.bindPopup(`<b>${member.name}</b><br><small>${minutesAgo} min ago</small>`);
+      marker.bindPopup(`
+        <div style="padding:12px;text-align:center;font-family:-apple-system,sans-serif">
+          <div style="font-weight:700;font-size:16px;color:${member.color};margin-bottom:4px">${member.name}</div>
+          <div style="font-size:13px;color:#64748b">${minutesAgo} min ago</div>
+        </div>
+      `);
     });
   }, [liveLocations, teamMembers, currentUser, showLiveTracking, mapReady]);
 
@@ -851,25 +1030,29 @@ function RepZoneApp() {
         color: currentUser.color,
         fillColor: currentUser.color,
         fillOpacity: 0.3,
-        weight: 2,
+        weight: 3,
         className: 'tracking-indicator'
       });
 
       circle.addTo(userLocationLayerRef.current);
 
-      // 🚀 GPS FRESHNESS - Show GPS age in popup
       const gpsAge = getGPSAge(currentLocation);
       const isFresh = isGPSFresh(currentLocation);
       
       const youIcon = L.divIcon({
-        html: `<div style="background:${currentUser.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.4);position:relative">${currentUser.name.charAt(0)}<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;background:${isFresh ? '#10b981' : '#f59e0b'};border:3px solid white;border-radius:50%;animation:pulse 2s infinite"></div></div>`,
-        iconSize: [48, 48],
-        iconAnchor: [24, 24]
+        html: `<div style="background:${currentUser.color};width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.5rem;border:5px solid white;box-shadow:0 6px 20px rgba(0,0,0,0.3);position:relative;animation:pulse 2s infinite">${currentUser.name.charAt(0)}<div style="position:absolute;top:-8px;right:-8px;width:20px;height:20px;background:${isFresh ? '#10b981' : '#f59e0b'};border:4px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.2)"></div></div>`,
+        iconSize: [56, 56],
+        iconAnchor: [28, 28]
       });
 
       const marker = L.marker([currentLocation.lat, currentLocation.lng], { icon: youIcon });
       marker.addTo(userLocationLayerRef.current);
-      marker.bindPopup(`<div style="padding:8px;text-align:center"><b style="color:${currentUser.color};font-size:1.125rem">📍 You Are Here</b><br><small style="color:#64748b">GPS: ${gpsAge}s old ${isFresh ? '✅' : '⚠️ Stale'}</small></div>`);
+      marker.bindPopup(`
+        <div style="padding:14px;text-align:center;font-family:-apple-system,sans-serif">
+          <div style="font-weight:700;font-size:18px;color:${currentUser.color};margin-bottom:6px">📍 You Are Here</div>
+          <div style="font-size:13px;color:#64748b">GPS: ${gpsAge}s old ${isFresh ? '✅' : '⚠️ Stale'}</div>
+        </div>
+      `);
     }
   }, [currentLocation, currentUser, mapReady]);
 
@@ -900,32 +1083,29 @@ function RepZoneApp() {
   };
 
   const leaderboard = getLeaderboard();
-
-  // 🚀 GPS FRESHNESS - Show GPS age in UI
   const gpsAge = currentLocation ? getGPSAge(currentLocation) : null;
   const gpsIsFresh = currentLocation ? isGPSFresh(currentLocation) : false;
 
   const LeaderboardView = () => (
     <div style={{padding:'1rem'}}>
-      <h2 style={{fontSize:'1.5rem',fontWeight:'bold',marginBottom:'1rem'}}>🏆 Leaderboard</h2>
+      <h2 style={{fontSize:'1.75rem',fontWeight:'bold',marginBottom:'1.25rem',color:'#1e293b'}}>🏆 Leaderboard</h2>
 
-      <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.5rem',background:'#f1f5f9',padding:'0.25rem',borderRadius:'0.75rem'}}>
-        {[['day','Today'],['week','This Week'],['all','All Time']].map(([period, label]) => (
+      <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.5rem',background:'#f1f5f9',padding:'0.375rem',borderRadius:'1rem'}}>
+        {[['day','📅 Today'],['week','📆 Week'],['all','🗓️ All Time']].map(([period, label]) => (
           <button 
             key={period} 
             onClick={() => setLeaderboardPeriod(period)} 
+            className="modern-button"
             style={{
               flex:1,
-              padding:'0.75rem',
-              borderRadius:'0.5rem',
+              padding:'0.875rem',
+              borderRadius:'0.75rem',
               border:'none',
               background:leaderboardPeriod===period?'white':'transparent',
               color:leaderboardPeriod===period?'#1e293b':'#64748b',
-              fontWeight:'600',
-              cursor:'pointer',
+              fontWeight:'700',
               fontSize:'0.875rem',
-              boxShadow:leaderboardPeriod===period?'0 1px 3px rgba(0,0,0,0.1)':'none',
-              transition:'all 0.2s'
+              boxShadow:leaderboardPeriod===period?'0 2px 8px rgba(0,0,0,0.08)':'none'
             }}
           >
             {label}
@@ -937,25 +1117,24 @@ function RepZoneApp() {
         {leaderboard.map((member, index) => (
           <div 
             key={member.id} 
+            className="stat-card"
             style={{
-              padding:'1.25rem',
               background:index===0?`linear-gradient(135deg, ${member.color}22 0%, ${member.color}11 100%)`:index===1?'#f8fafc':'white',
-              borderRadius:'1rem',
-              border:index===0?`3px solid ${member.color}`:index===1?'2px solid #e2e8f0':'1px solid #e2e8f0',
+              border:index===0?`3px solid ${member.color}`:index===1?'2px solid #e2e8f0':'1px solid #e5e7eb',
               display:'flex',
               alignItems:'center',
               gap:'1rem',
               position:'relative',
-              boxShadow:index===0?'0 4px 12px rgba(0,0,0,0.1)':index===1?'0 2px 8px rgba(0,0,0,0.05)':'none'
+              boxShadow:index===0?'0 8px 20px rgba(0,0,0,0.12)':index===1?'0 4px 12px rgba(0,0,0,0.06)':'0 2px 8px rgba(0,0,0,0.06)'
             }}
           >
             {index < 3 && (
               <div style={{
                 position:'absolute',
-                top:'-12px',
-                left:'-12px',
-                width:'40px',
-                height:'40px',
+                top:'-14px',
+                left:'-14px',
+                width:'44px',
+                height:'44px',
                 borderRadius:'50%',
                 background:index===0?'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)':index===1?'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)':'linear-gradient(135deg, #fb923c 0%, #ea580c 100%)',
                 display:'flex',
@@ -963,33 +1142,33 @@ function RepZoneApp() {
                 justifyContent:'center',
                 color:'white',
                 fontWeight:'bold',
-                fontSize:'1.125rem',
-                boxShadow:'0 2px 8px rgba(0,0,0,0.2)'
+                fontSize:'1.25rem',
+                boxShadow:'0 4px 12px rgba(0,0,0,0.25)'
               }}>
                 {index===0?'🥇':index===1?'🥈':'🥉'}
               </div>
             )}
-            <div style={{fontSize:'2rem',fontWeight:'bold',color:index<3?member.color:'#94a3b8',width:'40px',textAlign:'center'}}>
+            <div style={{fontSize:'2.25rem',fontWeight:'bold',color:index<3?member.color:'#94a3b8',width:'50px',textAlign:'center'}}>
               {index>=3?`#${index+1}`:''}
             </div>
-            <div style={{width:'56px',height:'56px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.5rem',flexShrink:0,boxShadow:'0 2px 8px rgba(0,0,0,0.15)',position:'relative'}}>
+            <div style={{width:'64px',height:'64px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.75rem',flexShrink:0,boxShadow:'0 4px 12px rgba(0,0,0,0.2)',position:'relative'}}>
               {member.name.charAt(0)}
               {member.isOnline && (
-                <div style={{position:'absolute',top:'-4px',right:'-4px',width:'18px',height:'18px',background:'#10b981',border:'3px solid white',borderRadius:'50%'}}></div>
+                <div style={{position:'absolute',top:'-4px',right:'-4px',width:'20px',height:'20px',background:'#10b981',border:'4px solid white',borderRadius:'50%',boxShadow:'0 2px 8px rgba(16,185,129,0.5)'}}></div>
               )}
             </div>
             <div style={{flex:1}}>
-              <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.25rem'}}>
-                <span style={{fontWeight:'bold',fontSize:'1.125rem'}}>{member.name}</span>
+              <div style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'0.375rem'}}>
+                <span style={{fontWeight:'bold',fontSize:'1.25rem',color:'#1e293b'}}>{member.name}</span>
                 {member.isOnline && (
-                  <span style={{fontSize:'0.625rem',padding:'0.25rem 0.5rem',background:'#10b981',color:'white',borderRadius:'1rem',fontWeight:'600'}}>● ONLINE</span>
+                  <span style={{fontSize:'0.6875rem',padding:'0.375rem 0.625rem',background:'#10b981',color:'white',borderRadius:'1rem',fontWeight:'700',boxShadow:'0 2px 6px rgba(16,185,129,0.3)'}}>● ONLINE</span>
                 )}
               </div>
-              <div style={{fontSize:'0.75rem',color:'#64748b'}}>
+              <div style={{fontSize:'0.8125rem',color:'#64748b',fontWeight:'600'}}>
                 {member.knockCount} leads {leaderboardPeriod === 'day' ? 'today' : leaderboardPeriod === 'week' ? 'this week' : 'total'}
               </div>
             </div>
-            <div style={{fontSize:'2.5rem',fontWeight:'bold',color:member.color,textAlign:'right'}}>
+            <div style={{fontSize:'3rem',fontWeight:'bold',color:member.color,textAlign:'right',textShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
               {member.knockCount}
             </div>
           </div>
@@ -997,89 +1176,98 @@ function RepZoneApp() {
       </div>
 
       {leaderboard.length === 0 && (
-        <div style={{textAlign:'center',padding:'3rem',color:'#64748b'}}>
-          <div style={{fontSize:'3rem',marginBottom:'1rem'}}>🏆</div>
-          <p style={{fontSize:'1.125rem',fontWeight:'600',marginBottom:'0.5rem'}}>No data yet</p>
-          <p style={{fontSize:'0.875rem'}}>Start dropping leads to see rankings!</p>
+        <div style={{textAlign:'center',padding:'4rem 1rem',color:'#64748b'}}>
+          <div style={{fontSize:'4rem',marginBottom:'1rem'}}>🏆</div>
+          <p style={{fontSize:'1.25rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>No data yet</p>
+          <p style={{fontSize:'0.9375rem'}}>Start dropping leads to see rankings!</p>
         </div>
       )}
     </div>
   );
 
-  const MobileDropdownContent = () => (
+  // [CONTINUED IN NEXT MESSAGE - Code is too long!]
+ const MobileDropdownContent = () => (
     <div style={{padding:'1rem',paddingTop:'5rem'}}>
       {currentUser && (
-        <div style={{marginBottom:'1rem',padding:'0.75rem',background:`${currentUser.color}15`,borderRadius:'0.75rem',border:`2px solid ${currentUser.color}`,display:'flex',alignItems:'center',gap:'0.75rem'}}>
-          <div style={{width:'40px',height:'40px',borderRadius:'50%',background:currentUser.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.125rem'}}>
+        <div style={{marginBottom:'1rem',padding:'1rem',background:`${currentUser.color}15`,borderRadius:'1rem',border:`2px solid ${currentUser.color}`,display:'flex',alignItems:'center',gap:'0.75rem'}}>
+          <div style={{width:'48px',height:'48px',borderRadius:'50%',background:currentUser.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',boxShadow:'0 2px 8px rgba(0,0,0,0.15)'}}>
             {currentUser.name.charAt(0)}
           </div>
           <div style={{flex:1}}>
-            <div style={{fontWeight:'600',fontSize:'0.875rem'}}>{currentUser.name}</div>
-            <div style={{fontSize:'0.625rem',color:'#64748b'}}>{currentUser.role}</div>
+            <div style={{fontWeight:'700',fontSize:'0.9375rem'}}>{currentUser.name}</div>
+            <div style={{fontSize:'0.6875rem',color:'#64748b',fontWeight:'600'}}>{currentUser.role}</div>
           </div>
-          <button onClick={() => setCurrentUser(null)} style={{padding:'0.375rem 0.625rem',fontSize:'0.625rem',background:'white',border:'1px solid #e2e8f0',borderRadius:'0.375rem',cursor:'pointer',fontWeight:'600'}}>Switch</button>
+          <button onClick={() => setCurrentUser(null)} className="modern-button" style={{padding:'0.5rem 0.875rem',fontSize:'0.75rem',background:'white',border:'1px solid #e2e8f0',borderRadius:'0.5rem',fontWeight:'700'}}>Switch</button>
         </div>
       )}
 
-      <div style={{display:'flex',marginBottom:'1rem',background:'#f1f5f9',borderRadius:'0.5rem',padding:'0.25rem'}}>
-        {[['controls','⚙️'],['stats','📊'],['leaderboard','🏆']].map(([tab,icon]) => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{flex:1,padding:'0.5rem',borderRadius:'0.375rem',border:'none',background:activeTab===tab?'white':'transparent',color:activeTab===tab?'#1e293b':'#64748b',fontWeight:'600',cursor:'pointer',fontSize:'0.875rem'}}>{icon}</button>
+      <div style={{display:'flex',marginBottom:'1rem',background:'#f1f5f9',borderRadius:'0.75rem',padding:'0.375rem'}}>
+        {[['controls','⚙️ Controls'],['stats','📊 Stats'],['leaderboard','🏆 Board']].map(([tab,label]) => (
+          <button key={tab} onClick={() => setActiveTab(tab)} className="modern-button" style={{flex:1,padding:'0.75rem 0.5rem',borderRadius:'0.5rem',border:'none',background:activeTab===tab?'white':'transparent',color:activeTab===tab?'#1e293b':'#64748b',fontWeight:'700',fontSize:'0.8125rem',boxShadow:activeTab===tab?'0 2px 6px rgba(0,0,0,0.06)':'none'}}>{label}</button>
         ))}
       </div>
 
       {activeTab === 'controls' && (
         <div>
-          <div style={{padding:'0.75rem',background:trackingEnabled?'#dcfce7':'#fee2e2',borderRadius:'0.75rem',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`,marginBottom:'1rem'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.375rem'}}>
-              <b style={{fontSize:'0.75rem'}}>📍 GPS</b>
-              <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{padding:'0.375rem 0.75rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.375rem',fontWeight:'600',cursor:'pointer',fontSize:'0.625rem'}}>{trackingEnabled ? 'Stop' : 'Start'}</button>
+          <div className="stat-card" style={{marginBottom:'1rem',background:trackingEnabled?'#dcfce7':'#fee2e2',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.5rem'}}>
+              <b style={{fontSize:'0.875rem',fontWeight:'700'}}>📍 GPS Tracking</b>
+              <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} className="modern-button" style={{padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'700',fontSize:'0.75rem',boxShadow:`0 2px 8px ${trackingEnabled?'rgba(239,68,68,0.3)':'rgba(16,185,129,0.3)'}`}}>{trackingEnabled ? 'Stop' : 'Start'}</button>
             </div>
-            {/* 🚀 GPS FRESHNESS - Show age in mobile UI */}
-            <p style={{fontSize:'0.625rem',color:'#64748b'}}>
+            <p style={{fontSize:'0.75rem',color:'#64748b',fontWeight:'600'}}>
               {trackingEnabled ? (
                 gpsAge !== null ? `Active - ${gpsAge}s old ${gpsIsFresh ? '✅' : '⚠️ Stale'}` : 'Active'
               ) : 'Enable to verify'}
             </p>
           </div>
 
-          <div style={{marginBottom:'1rem'}}>
-            <label style={{display:'block',fontSize:'0.75rem',fontWeight:'600',marginBottom:'0.375rem'}}>Mode</label>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.375rem'}}>
-              {[['drop-pin','📍'],['draw-zone','✏️'],['select','👆']].map(([m,icon]) => (
-                <button key={m} onClick={()=>setMode(m)} style={{padding:'0.625rem',borderRadius:'0.375rem',border:'none',background:mode===m?'#2563eb':'#f1f5f9',color:mode===m?'white':'#475569',fontSize:'1.125rem',cursor:'pointer'}}>{icon}</button>
+          <div className="stat-card" style={{marginBottom:'1rem'}}>
+            <label style={{display:'block',fontSize:'0.875rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e293b'}}>🎯 Mode</label>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem'}}>
+              {[['drop-pin','📍','Pin'],['draw-zone','✏️','Zone'],['select','👆','Select']].map(([m,icon,label]) => (
+                <button key={m} onClick={()=>setMode(m)} className="modern-button" style={{padding:'1rem 0.5rem',borderRadius:'0.75rem',border:mode===m?'none':'2px solid #e5e7eb',background:mode===m?'#3b82f6':'white',color:mode===m?'white':'#64748b',fontSize:'1.5rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem',boxShadow:mode===m?'0 4px 12px rgba(59,130,246,0.3)':'none'}}>
+                  <div>{icon}</div>
+                  <div style={{fontSize:'0.6875rem',fontWeight:'700'}}>{label}</div>
+                </button>
               ))}
             </div>
           </div>
 
           {mode === "drop-pin" && (
-            <div style={{padding:'0.75rem',background:'#dbeafe',borderRadius:'0.75rem',marginBottom:'1rem'}}>
-              <label style={{display:'block',fontSize:'0.75rem',fontWeight:'600',marginBottom:'0.5rem'}}>Lead Type</label>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.375rem',marginBottom:'0.5rem'}}>
+            <div className="stat-card" style={{background:'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)',border:'2px solid #3b82f6',marginBottom:'1rem'}}>
+              <label style={{display:'block',fontSize:'0.875rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e3a8a'}}>💰 Lead Type</label>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
                 {[['estimate','💰','A','#10b981'],['callback','📞','B','#f59e0b'],['notinterested','📋','C','#64748b']].map(([s,icon,display,color]) => (
-                  <button key={s} onClick={()=>setStatus(s)} style={{padding:'0.5rem',borderRadius:'0.375rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#475569',fontSize:'1rem',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.125rem'}}>
+                  <button key={s} onClick={()=>setStatus(s)} className="modern-button" style={{padding:'0.875rem 0.5rem',borderRadius:'0.75rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#64748b',fontSize:'1.5rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem',boxShadow:status===s?`0 4px 12px ${color}50`:'none'}}>
                     <div>{icon}</div>
-                    <div style={{fontSize:'0.625rem',fontWeight:'600'}}>{display}</div>
+                    <div style={{fontSize:'0.75rem',fontWeight:'700'}}>{display}</div>
                   </button>
                 ))}
               </div>
-              <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note" style={{width:'100%',padding:'0.5rem',border:'2px solid #93c5fd',borderRadius:'0.375rem',fontSize:'0.75rem'}} />
+              <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, dog, etc.)" style={{width:'100%',padding:'0.875rem',border:'2px solid #93c5fd',borderRadius:'0.75rem',fontSize:'0.875rem',fontWeight:'600'}} />
             </div>
           )}
         </div>
       )}
 
       {activeTab === 'stats' && (
-        <div style={{padding:'0.75rem',background:'#f8fafc',borderRadius:'0.75rem'}}>
-          <h3 style={{fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>📊 Stats</h3>
-          <div style={{fontSize:'0.75rem',color:'#64748b',lineHeight:'1.6'}}>
-            💰 {stats.estimates} estimates<br/>
-            📞 {stats.callbacks} callbacks<br/>
-            📋 {stats.notinterested} not interested<br/>
-            <hr style={{margin:'0.375rem 0',border:'none',borderTop:'1px solid #e2e8f0'}}/>
-            ✅ {stats.verified} verified<br/>
-            🚫 {stats.suspicious} suspicious<br/>
-            <hr style={{margin:'0.375rem 0',border:'none',borderTop:'1px solid #e2e8f0'}}/>
-            👥 {stats.onlineUsers} online
+        <div className="stat-card">
+          <h3 style={{fontSize:'1.125rem',fontWeight:'700',marginBottom:'1rem',color:'#1e293b'}}>📊 Statistics</h3>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.75rem'}}>
+            {[
+              ['💰',stats.estimates,'Estimates','#10b981'],
+              ['📞',stats.callbacks,'Callbacks','#f59e0b'],
+              ['📋',stats.notinterested,'Not Int.','#64748b'],
+              ['✅',stats.verified,'Verified','#10b981'],
+              ['🚫',stats.suspicious,'Suspicious','#ef4444'],
+              ['👥',stats.onlineUsers,'Online','#3b82f6']
+            ].map(([icon,count,label,color]) => (
+              <div key={label} style={{padding:'1rem',background:`${color}15`,borderRadius:'0.75rem',border:`2px solid ${color}`,textAlign:'center'}}>
+                <div style={{fontSize:'2rem',marginBottom:'0.25rem'}}>{icon}</div>
+                <div style={{fontSize:'1.75rem',fontWeight:'bold',color:color,marginBottom:'0.25rem'}}>{count}</div>
+                <div style={{fontSize:'0.75rem',color:'#64748b',fontWeight:'600'}}>{label}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1092,124 +1280,124 @@ function RepZoneApp() {
     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#f8fafc'}}>
       {toastMessage && <div className="toast">{toastMessage}</div>}
 
-      {saving && (
-        <div style={{position:'fixed',top:'1rem',left:'50%',transform:'translateX(-50%)',background:'white',padding:'0.75rem 1.5rem',borderRadius:'2rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10001,display:'flex',gap:'0.75rem',alignItems:'center'}}>
-          <div className="spinner" style={{width:'20px',height:'20px'}}></div>
-          <span style={{fontWeight:'600'}}>Saving...</span>
+      {(saving || geocoding) && (
+        <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',padding:'2rem 2.5rem',borderRadius:'1.5rem',boxShadow:'0 20px 40px rgba(0,0,0,0.2)',zIndex:10001,display:'flex',flexDirection:'column',gap:'1rem',alignItems:'center'}}>
+          <div className="spinner" style={{width:'40px',height:'40px',borderWidth:'4px',borderTopColor:'#3b82f6'}}></div>
+          <span style={{fontWeight:'700',fontSize:'1.125rem',color:'#1e293b'}}>{geocoding ? '🏠 Finding Address...' : '💾 Saving...'}</span>
         </div>
       )}
 
       {trackingEnabled && !isMobile && (
-        <div style={{position:'fixed',top:'1rem',right:'1rem',background:gpsIsFresh?'#10b981':'#f59e0b',color:'white',padding:'0.75rem 1.25rem',borderRadius:'2rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10001,display:'flex',gap:'0.75rem',alignItems:'center',fontSize:'0.875rem',fontWeight:'600'}}>
-          <div style={{width:'12px',height:'12px',background:'white',borderRadius:'50%',animation:'pulse 2s infinite'}}></div>
-          <span>GPS {gpsAge !== null ? `${gpsAge}s old` : 'Active'} {gpsIsFresh ? '✅' : '⚠️'}</span>
+        <div style={{position:'fixed',top:'1rem',right:'1rem',background:gpsIsFresh?'#10b981':'#f59e0b',color:'white',padding:'0.875rem 1.5rem',borderRadius:'2rem',boxShadow:'0 6px 16px rgba(0,0,0,0.2)',zIndex:10001,display:'flex',gap:'0.875rem',alignItems:'center',fontSize:'0.9375rem',fontWeight:'700'}}>
+          <div style={{width:'14px',height:'14px',background:'white',borderRadius:'50%',animation:'pulse 2s infinite'}}></div>
+          <span>GPS {gpsAge !== null ? `${gpsAge}s` : 'Active'} {gpsIsFresh ? '✅' : '⚠️'}</span>
         </div>
       )}
 
       {selectedZone && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem'}}>
-              <h3 style={{fontSize:'1.25rem',fontWeight:'bold'}}>{selectedZone.name}</h3>
-              <button onClick={() => setSelectedZone(null)} style={{width:'32px',height:'32px',borderRadius:'50%',border:'none',background:'#f1f5f9',cursor:'pointer',fontSize:'1.25rem',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+          <div style={{background:'white',borderRadius:'1.5rem',padding:'2rem',maxWidth:'440px',width:'100%',boxShadow:'0 20px 40px rgba(0,0,0,0.3)',animation:'fadeIn 0.3s ease'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.5rem'}}>
+              <h3 style={{fontSize:'1.5rem',fontWeight:'bold',color:'#1e293b'}}>{selectedZone.name}</h3>
+              <button onClick={() => setSelectedZone(null)} className="modern-button" style={{width:'40px',height:'40px',borderRadius:'50%',border:'none',background:'#f1f5f9',fontSize:'1.5rem',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
             {selectedZone.assigned_to ? (
               <>
-                <div style={{padding:'1rem',background:'#f0fdf4',borderRadius:'0.75rem',border:'2px solid #10b981',marginBottom:'1rem'}}>
+                <div style={{padding:'1.25rem',background:'#f0fdf4',borderRadius:'1rem',border:'2px solid #10b981',marginBottom:'1rem'}}>
                   <div style={{display:'flex',alignItems:'center',gap:'1rem'}}>
-                    <div style={{width:'48px',height:'48px',borderRadius:'50%',background:teamMembers.find(u => u.id === selectedZone.assigned_to)?.color || '#64748b',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem'}}>
+                    <div style={{width:'56px',height:'56px',borderRadius:'50%',background:teamMembers.find(u => u.id === selectedZone.assigned_to)?.color || '#64748b',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.5rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
                       {teamMembers.find(u => u.id === selectedZone.assigned_to)?.name.charAt(0) || '?'}
                     </div>
                     <div>
-                      <div style={{fontSize:'0.75rem',color:'#166534',fontWeight:'600'}}>ASSIGNED TO</div>
-                      <div style={{fontWeight:'600',fontSize:'1.125rem',color:'#166534'}}>{teamMembers.find(u => u.id === selectedZone.assigned_to)?.name || 'Unknown'}</div>
+                      <div style={{fontSize:'0.8125rem',color:'#166534',fontWeight:'700'}}>ASSIGNED TO</div>
+                      <div style={{fontWeight:'700',fontSize:'1.25rem',color:'#166534'}}>{teamMembers.find(u => u.id === selectedZone.assigned_to)?.name || 'Unknown'}</div>
                     </div>
                   </div>
                 </div>
                 {currentUser?.role === 'admin' && (
-                  <button onClick={() => unassignZone(selectedZone.id)} style={{width:'100%',padding:'0.75rem',background:'#f59e0b',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',marginBottom:'0.5rem',fontSize:'1rem'}}>🔓 Unassign Zone</button>
+                  <button onClick={() => unassignZone(selectedZone.id)} className="modern-button" style={{width:'100%',padding:'1rem',background:'#f59e0b',color:'white',border:'none',borderRadius:'1rem',fontWeight:'700',marginBottom:'0.75rem',fontSize:'1rem',boxShadow:'0 4px 12px rgba(245,158,11,0.3)'}}>🔓 Unassign Zone</button>
                 )}
               </>
             ) : (
               <>
                 {currentUser?.role === 'admin' ? (
                   <>
-                    <p style={{color:'#64748b',marginBottom:'1rem',fontSize:'0.875rem'}}>Select a team member to assign this zone:</p>
-                    <div style={{marginBottom:'1rem',maxHeight:'300px',overflowY:'auto'}}>
+                    <p style={{color:'#64748b',marginBottom:'1rem',fontSize:'0.9375rem',fontWeight:'600'}}>Select a team member to assign this zone:</p>
+                    <div style={{marginBottom:'1rem',maxHeight:'320px',overflowY:'auto'}}>
                       {teamMembers.map(member => (
-                        <div key={member.id} onClick={() => assignZone(selectedZone.id, member.id)} style={{padding:'1rem',marginBottom:'0.5rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'1rem',transition:'all 0.2s'}} onMouseEnter={e => e.currentTarget.style.borderColor = member.color} onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                          <div style={{width:'40px',height:'40px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.125rem'}}>
+                        <div key={member.id} onClick={() => assignZone(selectedZone.id, member.id)} className="stat-card modern-button" style={{marginBottom:'0.75rem',display:'flex',alignItems:'center',gap:'1rem',cursor:'pointer'}}>
+                          <div style={{width:'48px',height:'48px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',boxShadow:'0 2px 8px rgba(0,0,0,0.15)'}}>
                             {member.name.charAt(0)}
                           </div>
                           <div>
-                            <div style={{fontWeight:'600'}}>{member.name}</div>
-                            <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.role}</div>
+                            <div style={{fontWeight:'700',fontSize:'1.0625rem'}}>{member.name}</div>
+                            <div style={{fontSize:'0.8125rem',color:'#64748b',fontWeight:'600'}}>{member.role}</div>
                           </div>
                         </div>
                       ))}
                     </div>
                   </>
                 ) : (
-                  <div style={{padding:'1rem',background:'#fef3c7',borderRadius:'0.75rem',border:'2px solid #f59e0b',marginBottom:'1rem'}}>
-                    <p style={{color:'#92400e',fontSize:'0.875rem'}}>⚠️ This zone is unassigned. Only admins can assign zones.</p>
+                  <div style={{padding:'1.25rem',background:'#fef3c7',borderRadius:'1rem',border:'2px solid #f59e0b',marginBottom:'1rem'}}>
+                    <p style={{color:'#92400e',fontSize:'0.9375rem',fontWeight:'600'}}>⚠️ This zone is unassigned. Only admins can assign zones.</p>
                   </div>
                 )}
               </>
             )}
             {currentUser?.role === 'admin' && (
-              <button onClick={() => deleteZone(selectedZone.id)} style={{width:'100%',padding:'0.75rem',background:'#ef4444',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',marginBottom:'0.5rem',fontSize:'1rem'}}>🗑️ Delete Zone</button>
+              <button onClick={() => deleteZone(selectedZone.id)} className="modern-button" style={{width:'100%',padding:'1rem',background:'#ef4444',color:'white',border:'none',borderRadius:'1rem',fontWeight:'700',marginBottom:'0.75rem',fontSize:'1rem',boxShadow:'0 4px 12px rgba(239,68,68,0.3)'}}>🗑️ Delete Zone</button>
             )}
-            <button onClick={() => setSelectedZone(null)} style={{width:'100%',padding:'0.75rem',background:'#e2e8f0',color:'#1e293b',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem'}}>Close</button>
+            <button onClick={() => setSelectedZone(null)} className="modern-button" style={{width:'100%',padding:'1rem',background:'#e5e7eb',color:'#1e293b',border:'none',borderRadius:'1rem',fontWeight:'700',fontSize:'1rem'}}>Close</button>
           </div>
         </div>
       )}
 
       {!currentUser && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10000,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%',maxHeight:'80vh',overflowY:'auto'}}>
-            <h2 style={{fontSize:'1.5rem',fontWeight:'bold',marginBottom:'0.5rem'}}>Select Your Profile</h2>
-            <p style={{color:'#64748b',marginBottom:'1.5rem',fontSize:'0.875rem'}}>Choose your name to start tracking</p>
+          <div style={{background:'white',borderRadius:'1.5rem',padding:'2rem',maxWidth:'440px',width:'100%',maxHeight:'80vh',overflowY:'auto',boxShadow:'0 20px 40px rgba(0,0,0,0.3)'}}>
+            <h2 style={{fontSize:'1.75rem',fontWeight:'bold',marginBottom:'0.75rem',color:'#1e293b'}}>👋 Select Your Profile</h2>
+            <p style={{color:'#64748b',marginBottom:'1.5rem',fontSize:'0.9375rem',fontWeight:'600'}}>Choose your name to start tracking</p>
             <div style={{marginBottom:'1rem'}}>
               {teamMembers.map(member => (
-                <div key={member.id} style={{padding:'1rem',marginBottom:'0.5rem',border:'2px solid #e2e8f0',borderRadius:'0.75rem',display:'flex',alignItems:'center',gap:'1rem',position:'relative'}}>
-                  <div onClick={() => selectCurrentUser(member)} style={{flex:1,display:'flex',alignItems:'center',gap:'1rem',cursor:'pointer'}}>
-                    <div style={{width:'48px',height:'48px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',flexShrink:0}}>
+                <div key={member.id} className="stat-card" style={{marginBottom:'0.75rem',display:'flex',alignItems:'center',gap:'1rem',position:'relative'}}>
+                  <div onClick={() => selectCurrentUser(member)} className="modern-button" style={{flex:1,display:'flex',alignItems:'center',gap:'1rem',cursor:'pointer'}}>
+                    <div style={{width:'56px',height:'56px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.5rem',flexShrink:0,boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
                       {member.name.charAt(0)}
                     </div>
                     <div>
-                      <div style={{fontWeight:'600',fontSize:'1.125rem'}}>{member.name}</div>
-                      <div style={{fontSize:'0.75rem',color:'#64748b'}}>{member.role}</div>
+                      <div style={{fontWeight:'700',fontSize:'1.125rem',color:'#1e293b'}}>{member.name}</div>
+                      <div style={{fontSize:'0.8125rem',color:'#64748b',fontWeight:'600'}}>{member.role}</div>
                     </div>
                   </div>
                   <div style={{position:'relative'}}>
-                    <button onClick={() => setEditingUser(editingUser?.id === member.id ? null : member)} style={{padding:'0.5rem',background:'#f1f5f9',border:'none',borderRadius:'0.5rem',cursor:'pointer',fontSize:'1.25rem'}}>⋮</button>
+                    <button onClick={() => setEditingUser(editingUser?.id === member.id ? null : member)} className="modern-button" style={{padding:'0.625rem',background:'#f1f5f9',border:'none',borderRadius:'0.75rem',fontSize:'1.5rem'}}>⋮</button>
                     {editingUser?.id === member.id && (
-                      <div style={{position:'absolute',right:0,top:'100%',marginTop:'0.5rem',background:'white',border:'2px solid #e2e8f0',borderRadius:'0.75rem',padding:'0.5rem',minWidth:'150px',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10}}>
-                        <button onClick={() => updateUserRole(member.id, member.role === 'admin' ? 'rep' : 'admin')} style={{width:'100%',padding:'0.75rem',background:member.role==='admin'?'#f59e0b':'#2563eb',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',marginBottom:'0.5rem',fontSize:'0.875rem'}}>{member.role === 'admin' ? '👤 Make Rep' : '⭐ Make Admin'}</button>
-                        <button onClick={() => deleteUser(member.id)} style={{width:'100%',padding:'0.75rem',background:'#ef4444',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'0.875rem'}}>🗑️ Delete</button>
+                      <div style={{position:'absolute',right:0,top:'100%',marginTop:'0.75rem',background:'white',border:'2px solid #e5e7eb',borderRadius:'1rem',padding:'0.75rem',minWidth:'180px',boxShadow:'0 10px 25px rgba(0,0,0,0.15)',zIndex:10,animation:'fadeIn 0.2s ease'}}>
+                        <button onClick={() => updateUserRole(member.id, member.role === 'admin' ? 'rep' : 'admin')} className="modern-button" style={{width:'100%',padding:'0.875rem',background:member.role==='admin'?'#f59e0b':'#3b82f6',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'700',marginBottom:'0.625rem',fontSize:'0.9375rem',boxShadow:`0 2px 8px ${member.role==='admin'?'rgba(245,158,11,0.3)':'rgba(59,130,246,0.3)'}`}}>{member.role === 'admin' ? '👤 Make Rep' : '⭐ Make Admin'}</button>
+                        <button onClick={() => deleteUser(member.id)} className="modern-button" style={{width:'100%',padding:'0.875rem',background:'#ef4444',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'700',fontSize:'0.9375rem',boxShadow:'0 2px 8px rgba(239,68,68,0.3)'}}>🗑️ Delete</button>
                       </div>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-            <button onClick={() => setShowUserModal(true)} style={{width:'100%',padding:'0.75rem',background:'#2563eb',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem'}}>➕ Add New Member</button>
+            <button onClick={() => setShowUserModal(true)} className="modern-button" style={{width:'100%',padding:'1rem',background:'#3b82f6',color:'white',border:'none',borderRadius:'1rem',fontWeight:'700',fontSize:'1rem',boxShadow:'0 4px 12px rgba(59,130,246,0.3)'}}>➕ Add New Member</button>
           </div>
         </div>
       )}
 
       {showUserModal && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10002,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1rem',padding:'2rem',maxWidth:'400px',width:'100%'}}>
-            <h3 style={{fontSize:'1.25rem',fontWeight:'bold',marginBottom:'1rem'}}>Add Team Member</h3>
-            <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Full Name" style={{width:'100%',padding:'0.75rem',border:'1px solid #cbd5e1',borderRadius:'0.5rem',marginBottom:'1rem',fontSize:'1rem'}} onKeyPress={e => e.key === 'Enter' && addTeamMember()}/>
-            <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)} style={{width:'100%',padding:'0.75rem',border:'1px solid #cbd5e1',borderRadius:'0.5rem',marginBottom:'1rem',fontSize:'1rem'}}>
-              <option value="rep">Rep</option>
-              <option value="admin">Admin</option>
+          <div style={{background:'white',borderRadius:'1.5rem',padding:'2rem',maxWidth:'440px',width:'100%',boxShadow:'0 20px 40px rgba(0,0,0,0.3)',animation:'fadeIn 0.3s ease'}}>
+            <h3 style={{fontSize:'1.5rem',fontWeight:'bold',marginBottom:'1.5rem',color:'#1e293b'}}>➕ Add Team Member</h3>
+            <input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Full Name" style={{width:'100%',padding:'1rem',border:'2px solid #e5e7eb',borderRadius:'1rem',marginBottom:'1rem',fontSize:'1rem',fontWeight:'600'}} onKeyPress={e => e.key === 'Enter' && addTeamMember()}/>
+            <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)} style={{width:'100%',padding:'1rem',border:'2px solid #e5e7eb',borderRadius:'1rem',marginBottom:'1.5rem',fontSize:'1rem',fontWeight:'600'}}>
+              <option value="rep">👤 Rep</option>
+              <option value="admin">⭐ Admin</option>
             </select>
-            <div style={{display:'flex',gap:'0.5rem'}}>
-              <button onClick={addTeamMember} style={{flex:1,padding:'0.75rem',background:'#2563eb',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem'}}>Add Member</button>
-              <button onClick={() => {setShowUserModal(false); setNewUserName(""); setNewUserRole("rep");}} style={{flex:1,padding:'0.75rem',background:'#e2e8f0',color:'#1e293b',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'1rem'}}>Cancel</button>
+            <div style={{display:'flex',gap:'0.75rem'}}>
+              <button onClick={addTeamMember} className="modern-button" style={{flex:1,padding:'1rem',background:'#3b82f6',color:'white',border:'none',borderRadius:'1rem',fontWeight:'700',fontSize:'1rem',boxShadow:'0 4px 12px rgba(59,130,246,0.3)'}}>Add Member</button>
+              <button onClick={() => {setShowUserModal(false); setNewUserName(""); setNewUserRole("rep");}} className="modern-button" style={{flex:1,padding:'1rem',background:'#e5e7eb',color:'#1e293b',border:'none',borderRadius:'1rem',fontWeight:'700',fontSize:'1rem'}}>Cancel</button>
             </div>
           </div>
         </div>
@@ -1230,96 +1418,102 @@ function RepZoneApp() {
 
       <div style={{display:'flex',height:'100%',gap:isMobile?0:'1rem',padding:isMobile?0:'1rem'}}>
         {!isMobile && (
-          <div className="desktop-sidebar" style={{width:'400px',background:'white',borderRadius:'0.75rem',boxShadow:'0 4px 6px rgba(0,0,0,0.1)',flexDirection:'column',overflow:'hidden'}}>
-            <div style={{padding:'1.5rem',borderBottom:'1px solid #e2e8f0'}}>
-              <h1 style={{fontSize:'1.75rem',fontWeight:'bold',marginBottom:'1rem'}}>RepZone Tracker</h1>
-              {currentUser && (
-                <div style={{display:'flex',alignItems:'center',gap:'0.75rem',padding:'1rem',background:`${currentUser.color}15`,borderRadius:'0.75rem',border:`2px solid ${currentUser.color}`}}>
-                  <div style={{width:'48px',height:'48px',borderRadius:'50%',background:currentUser.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',flexShrink:0}}>
+          <div className="desktop-sidebar" style={{width:'420px',background:'white',borderRadius:'1rem',boxShadow:'0 4px 12px rgba(0,0,0,0.08)',flexDirection:'column',overflow:'hidden',border:'1px solid #e5e7eb'}}>
+            <div style={{padding:'1.75rem',borderBottom:'1px solid #e5e7eb',background:'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'}}>
+              <h1 style={{fontSize:'2rem',fontWeight:'bold',marginBottom:'0.5rem',color:'white',textShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>🏠 RepZone</h1>
+              <p style={{color:'rgba(255,255,255,0.9)',fontSize:'0.875rem',fontWeight:'600'}}>Door Knocking Tracker</p>
+            </div>
+            
+            {currentUser && (
+              <div style={{padding:'1.25rem',borderBottom:'1px solid #e5e7eb'}}>
+                <div className="stat-card" style={{background:`${currentUser.color}15`,border:`2px solid ${currentUser.color}`,display:'flex',alignItems:'center',gap:'1rem'}}>
+                  <div style={{width:'56px',height:'56px',borderRadius:'50%',background:currentUser.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.5rem',flexShrink:0,boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
                     {currentUser.name.charAt(0)}
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:'600'}}>{currentUser.name}</div>
-                    <div style={{fontSize:'0.75rem',color:'#64748b'}}>{currentUser.role}</div>
+                    <div style={{fontWeight:'700',fontSize:'1.0625rem',color:'#1e293b'}}>{currentUser.name}</div>
+                    <div style={{fontSize:'0.8125rem',color:'#64748b',fontWeight:'600'}}>{currentUser.role}</div>
                   </div>
-                  <button onClick={() => setCurrentUser(null)} style={{padding:'0.5rem 0.75rem',fontSize:'0.75rem',background:'white',border:'1px solid #e2e8f0',borderRadius:'0.5rem',cursor:'pointer',fontWeight:'600'}}>Switch</button>
+                  <button onClick={() => setCurrentUser(null)} className="modern-button" style={{padding:'0.625rem 1rem',fontSize:'0.8125rem',background:'white',border:'1px solid #e5e7eb',borderRadius:'0.75rem',fontWeight:'700',boxShadow:'0 2px 4px rgba(0,0,0,0.06)'}}>Switch</button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            <div style={{display:'flex',borderBottom:'2px solid #e2e8f0'}}>
+            <div style={{display:'flex',borderBottom:'2px solid #e5e7eb'}}>
               {[['map','🗺️ Map'],['leaderboard','🏆 Stats']].map(([tab,label]) => (
                 <button key={tab} onClick={() => setActiveTab(tab === 'map' ? 'controls' : 'leaderboard')} className={`tab ${(tab === 'map' && activeTab === 'controls') || activeTab === tab ? 'active' : ''}`} style={{flex:1,textAlign:'center'}}>{label}</button>
               ))}
             </div>
 
-            <div style={{flex:1,overflowY:'auto',padding:'1rem'}}>
+            <div style={{flex:1,overflowY:'auto',padding:'1.25rem'}}>
               {activeTab === 'controls' && (
                 <>
-                  <div style={{padding:'1rem',background:trackingEnabled?'#dcfce7':'#fee2e2',borderRadius:'0.75rem',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`,marginBottom:'1rem'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.5rem'}}>
-                      <b style={{fontSize:'0.875rem'}}>📍 GPS Tracking</b>
-                      <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'0.75rem'}}>{trackingEnabled ? 'Stop' : 'Start'}</button>
+                  <div className="stat-card" style={{marginBottom:'1.25rem',background:trackingEnabled?'#dcfce7':'#fee2e2',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem'}}>
+                      <b style={{fontSize:'0.9375rem',fontWeight:'700'}}>📍 GPS Tracking</b>
+                      <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} className="modern-button" style={{padding:'0.625rem 1.25rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'700',fontSize:'0.8125rem',boxShadow:`0 2px 8px ${trackingEnabled?'rgba(239,68,68,0.3)':'rgba(16,185,129,0.3)'}`}}>{trackingEnabled ? 'Stop' : 'Start'}</button>
                     </div>
-                    {/* 🚀 GPS FRESHNESS - Show age in desktop UI */}
-                    <p style={{fontSize:'0.75rem',color:'#64748b'}}>
+                    <p style={{fontSize:'0.8125rem',color:'#64748b',fontWeight:'600'}}>
                       {trackingEnabled ? (
-                        gpsAge !== null ? `✅ Active - GPS is ${gpsAge}s old ${gpsIsFresh ? '(Fresh ✅)' : '(Stale ⚠️)'}` : '✅ Location tracking active for verification'
+                        gpsAge !== null ? `✅ Active - GPS is ${gpsAge}s old ${gpsIsFresh ? '(Fresh ✅)' : '(Stale ⚠️)'}` : '✅ Location tracking active'
                       ) : '⚠️ Enable to verify pin locations'}
                     </p>
                   </div>
 
-                  <div style={{marginBottom:'1.5rem'}}>
-                    <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.5rem'}}>Mode</label>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem'}}>
+                  <div className="stat-card" style={{marginBottom:'1.25rem'}}>
+                    <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e293b'}}>🎯 Mode</label>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.75rem'}}>
                       {[['drop-pin','📍 Pin'],['draw-zone','✏️ Zone'],['select','👆 Select']].map(([m,label]) => (
-                        <button key={m} onClick={()=>setMode(m)} style={{padding:'0.75rem 0.5rem',borderRadius:'0.5rem',border:'none',background:mode===m?'#2563eb':'#f1f5f9',color:mode===m?'white':'#475569',fontSize:'0.875rem',fontWeight:'600',cursor:'pointer',transition:'all 0.2s'}}>{label}</button>
+                        <button key={m} onClick={()=>setMode(m)} className="modern-button" style={{padding:'1rem 0.75rem',borderRadius:'0.75rem',border:mode===m?'none':'2px solid #e5e7eb',background:mode===m?'#3b82f6':'white',color:mode===m?'white':'#64748b',fontSize:'0.9375rem',fontWeight:'700',boxShadow:mode===m?'0 4px 12px rgba(59,130,246,0.3)':'none'}}>{label}</button>
                       ))}
                     </div>
                     {mode === "draw-zone" && currentUser?.role !== 'admin' && (
-                      <p style={{fontSize:'0.75rem',color:'#ef4444',marginTop:'0.5rem',fontWeight:'600'}}>⚠️ Only admins can create zones</p>
+                      <p style={{fontSize:'0.8125rem',color:'#ef4444',marginTop:'0.75rem',fontWeight:'700'}}>⚠️ Only admins can create zones</p>
                     )}
                     {mode === "select" && (
-                      <p style={{fontSize:'0.75rem',color:'#64748b',marginTop:'0.5rem'}}>💡 Click on a zone to assign or delete it</p>
+                      <p style={{fontSize:'0.8125rem',color:'#64748b',marginTop:'0.75rem',fontWeight:'600'}}>💡 Click on a zone to assign or delete it</p>
                     )}
                     {mode === "drop-pin" && (
-                      <p style={{fontSize:'0.75rem',color:'#10b981',marginTop:'0.5rem',fontWeight:'600'}}>✅ You can drop pins anywhere - even in assigned zones!</p>
+                      <p style={{fontSize:'0.8125rem',color:'#10b981',marginTop:'0.75rem',fontWeight:'700'}}>✅ Click map to drop pins at addresses!</p>
                     )}
                   </div>
 
                   {mode === "drop-pin" && (
-                    <div style={{padding:'1rem',background:'#dbeafe',borderRadius:'0.75rem',marginBottom:'1rem'}}>
-                      <label style={{display:'block',fontSize:'0.875rem',fontWeight:'600',marginBottom:'0.75rem'}}>Lead Type</label>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'0.75rem'}}>
+                    <div className="stat-card" style={{background:'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)',border:'2px solid #3b82f6',marginBottom:'1.25rem'}}>
+                      <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.875rem',color:'#1e3a8a'}}>💰 Lead Type</label>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.75rem',marginBottom:'1rem'}}>
                         {[['estimate','💰','A','#10b981'],['callback','📞','B','#f59e0b'],['notinterested','📋','C','#64748b']].map(([s,icon,display,color]) => (
-                          <button key={s} onClick={()=>setStatus(s)} style={{padding:'0.75rem',borderRadius:'0.5rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#475569',fontSize:'1.25rem',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem',transition:'all 0.2s'}}>
+                          <button key={s} onClick={()=>setStatus(s)} className="modern-button" style={{padding:'1rem',borderRadius:'0.75rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#64748b',fontSize:'1.75rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.375rem',boxShadow:status===s?`0 4px 12px ${color}50`:'none'}}>
                             <div>{icon}</div>
-                            <div style={{fontSize:'0.75rem',fontWeight:'600'}}>{display}</div>
+                            <div style={{fontSize:'0.8125rem',fontWeight:'700'}}>{display}</div>
                           </button>
                         ))}
                       </div>
-                      <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, dog, etc.)" style={{width:'100%',padding:'0.75rem',border:'2px solid #93c5fd',borderRadius:'0.5rem',fontSize:'0.875rem'}} />
+                      <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, dog, etc.)" style={{width:'100%',padding:'0.875rem',border:'2px solid #93c5fd',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}} />
                       {!trackingEnabled && (
-                        <p style={{marginTop:'0.5rem',fontSize:'0.75rem',color:'#ef4444',fontWeight:'600'}}>⚠️ Enable GPS tracking to verify pin locations</p>
+                        <p style={{marginTop:'0.75rem',fontSize:'0.8125rem',color:'#ef4444',fontWeight:'700'}}>⚠️ Enable GPS tracking to verify pin locations</p>
                       )}
-                      {/* 🚀 GPS FRESHNESS - Warn if stale */}
                       {trackingEnabled && !gpsIsFresh && (
-                        <p style={{marginTop:'0.5rem',fontSize:'0.75rem',color:'#f59e0b',fontWeight:'600'}}>⚠️ GPS data is stale - walk around to refresh</p>
+                        <p style={{marginTop:'0.75rem',fontSize:'0.8125rem',color:'#f59e0b',fontWeight:'700'}}>⚠️ GPS data is stale - walk around to refresh</p>
                       )}
                     </div>
                   )}
 
-                  <div style={{padding:'1rem',background:'#f8fafc',borderRadius:'0.75rem'}}>
-                    <h3 style={{fontSize:'1rem',fontWeight:'600',marginBottom:'0.75rem'}}>📊 Stats</h3>
-                    <div style={{fontSize:'0.875rem',color:'#64748b',lineHeight:'1.8'}}>
-                      💰 {stats.estimates} estimates<br/>
-                      📞 {stats.callbacks} callbacks<br/>
-                      📋 {stats.notinterested} not interested<br/>
-                      <hr style={{margin:'0.5rem 0',border:'none',borderTop:'1px solid #e2e8f0'}}/>
-                      ✅ {stats.verified} verified<br/>
-                      🚫 {stats.suspicious} suspicious<br/>
-                      <hr style={{margin:'0.5rem 0',border:'none',borderTop:'1px solid #e2e8f0'}}/>
-                      👥 {stats.onlineUsers} online now
+                  <div className="stat-card">
+                    <h3 style={{fontSize:'1.0625rem',fontWeight:'700',marginBottom:'1rem',color:'#1e293b'}}>📊 Quick Stats</h3>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.75rem'}}>
+                      {[
+                        ['💰',stats.estimates,'Estimates','#10b981'],
+                        ['📞',stats.callbacks,'Callbacks','#f59e0b'],
+                        ['✅',stats.verified,'Verified','#10b981'],
+                        ['🚫',stats.suspicious,'Suspicious','#ef4444']
+                      ].map(([icon,count,label,color]) => (
+                        <div key={label} style={{padding:'1rem',background:`${color}15`,borderRadius:'0.75rem',border:`2px solid ${color}`,textAlign:'center'}}>
+                          <div style={{fontSize:'1.75rem',marginBottom:'0.375rem'}}>{icon}</div>
+                          <div style={{fontSize:'1.75rem',fontWeight:'bold',color:color,marginBottom:'0.25rem'}}>{count}</div>
+                          <div style={{fontSize:'0.75rem',color:'#64748b',fontWeight:'700'}}>{label}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </>
@@ -1330,7 +1524,7 @@ function RepZoneApp() {
           </div>
         )}
 
-        <div style={{flex:1,borderRadius:isMobile?0:'0.75rem',overflow:'hidden',boxShadow:isMobile?'none':'0 4px 6px rgba(0,0,0,0.1)',position:'relative'}}>
+        <div style={{flex:1,borderRadius:isMobile?0:'1rem',overflow:'hidden',boxShadow:isMobile?'none':'0 4px 12px rgba(0,0,0,0.08)',position:'relative',border:isMobile?'none':'1px solid #e5e7eb'}}>
           <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
         </div>
       </div>
