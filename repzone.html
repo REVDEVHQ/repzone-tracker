@@ -153,6 +153,9 @@ const LEAD_TYPES = {
   skipped: { icon: '⏭️', label: 'Skipped', color: '#ef4444', display: '⏭️' }
 };
 
+// 🚀 GPS FRESHNESS - Max age for GPS data (30 seconds)
+const GPS_MAX_AGE_MS = 30000;
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
@@ -179,6 +182,18 @@ function isPointInPolygon(point, polygon) {
     if (intersect) inside = !inside;
   }
   return inside;
+}
+
+// 🚀 GPS FRESHNESS CHECK
+function isGPSFresh(location) {
+  if (!location || !location.timestamp) return false;
+  const age = Date.now() - location.timestamp;
+  return age < GPS_MAX_AGE_MS;
+}
+
+function getGPSAge(location) {
+  if (!location || !location.timestamp) return null;
+  return Math.floor((Date.now() - location.timestamp) / 1000);
 }
 
 function RepZoneApp() {
@@ -215,7 +230,6 @@ function RepZoneApp() {
   const locationWatchId = useRef(null);
   const locationUpdateInterval = useRef(null);
   
-  // 🚀 LAYERGROUPS - Separate layers for performance
   const zoneLayerRef = useRef(null);
   const pinLayerRef = useRef(null);
   const liveLayerRef = useRef(null);
@@ -288,10 +302,12 @@ function RepZoneApp() {
     setTrackingEnabled(true);
     locationWatchId.current = navigator.geolocation.watchPosition(
       (position) => {
+        // 🚀 GPS FRESHNESS - Add timestamp to location data
         setCurrentLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-          accuracy: position.coords.accuracy
+          accuracy: position.coords.accuracy,
+          timestamp: Date.now() // Track when GPS was obtained
         });
       },
       () => {},
@@ -551,7 +567,6 @@ function RepZoneApp() {
     }).sort((a, b) => b.knockCount - a.knockCount);
   }
 
-  // 🚀 INITIALIZE MAP WITH LAYERGROUPS
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current || loading) return;
     
@@ -569,7 +584,6 @@ function RepZoneApp() {
 
     if (isMobile) L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // 🚀 Create separate layer groups
     zoneLayerRef.current = L.layerGroup().addTo(map);
     pinLayerRef.current = L.layerGroup().addTo(map);
     liveLayerRef.current = L.layerGroup().addTo(map);
@@ -593,6 +607,13 @@ function RepZoneApp() {
       if (mode === "drop-pin" && currentUser) {
         if (!currentLocation) {
           showToast('⚠️ Enable GPS tracking first!');
+          return;
+        }
+
+        // 🚀 GPS FRESHNESS CHECK - Validate GPS data is fresh
+        if (!isGPSFresh(currentLocation)) {
+          const age = getGPSAge(currentLocation);
+          showToast(`⚠️ GPS data is ${age}s old! Move around to get fresh GPS signal, then try again.`, 6000);
           return;
         }
 
@@ -629,8 +650,9 @@ function RepZoneApp() {
             setPins(prev => [...prev, newPin]);
             setNote("");
             const leadTypeLabel = LEAD_TYPES[status]?.label || status;
+            const gpsAge = getGPSAge(currentLocation);
             if (verification.status === 'verified') {
-              showToast(`✅ ${leadTypeLabel} saved! (Verified - ${Math.round(distance)}ft)`);
+              showToast(`✅ ${leadTypeLabel} saved! (Verified - ${Math.round(distance)}ft, GPS: ${gpsAge}s old)`);
             } else if (verification.status === 'suspicious') {
               showToast(`⚠️ ${leadTypeLabel} saved! (${Math.round(distance)}ft away - marked suspicious)`);
             } else {
@@ -691,7 +713,6 @@ function RepZoneApp() {
     return () => map.off('click', handleClick);
   }, [mode, status, note, activeZoneId, zones, mapReady, currentUser, currentLocation, teamMembers]);
 
-  // 🚀 RENDER ZONES (only when zones/mode changes)
   useEffect(() => {
     if (!mapReady || !zoneLayerRef.current) return;
     
@@ -729,7 +750,6 @@ function RepZoneApp() {
     });
   }, [zones, teamMembers, mode, mapReady]);
 
-  // 🚀 RENDER PINS (only when pins/filter changes)
   useEffect(() => {
     if (!mapReady || !pinLayerRef.current) return;
     
@@ -785,7 +805,6 @@ function RepZoneApp() {
     });
   }, [pins, filter, teamMembers, mapReady]);
 
-  // 🚀 RENDER LIVE LOCATIONS (only when live locations change)
   useEffect(() => {
     if (!mapReady || !liveLayerRef.current || !showLiveTracking) return;
     
@@ -821,7 +840,6 @@ function RepZoneApp() {
     });
   }, [liveLocations, teamMembers, currentUser, showLiveTracking, mapReady]);
 
-  // 🚀 RENDER USER LOCATION (only when current location changes)
   useEffect(() => {
     if (!mapReady || !userLocationLayerRef.current) return;
     
@@ -839,15 +857,19 @@ function RepZoneApp() {
 
       circle.addTo(userLocationLayerRef.current);
 
+      // 🚀 GPS FRESHNESS - Show GPS age in popup
+      const gpsAge = getGPSAge(currentLocation);
+      const isFresh = isGPSFresh(currentLocation);
+      
       const youIcon = L.divIcon({
-        html: `<div style="background:${currentUser.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.4);position:relative">${currentUser.name.charAt(0)}<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;background:#10b981;border:3px solid white;border-radius:50%;animation:pulse 2s infinite"></div></div>`,
+        html: `<div style="background:${currentUser.color};width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:1.25rem;border:4px solid white;box-shadow:0 4px 16px rgba(0,0,0,0.4);position:relative">${currentUser.name.charAt(0)}<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;background:${isFresh ? '#10b981' : '#f59e0b'};border:3px solid white;border-radius:50%;animation:pulse 2s infinite"></div></div>`,
         iconSize: [48, 48],
         iconAnchor: [24, 24]
       });
 
       const marker = L.marker([currentLocation.lat, currentLocation.lng], { icon: youIcon });
       marker.addTo(userLocationLayerRef.current);
-      marker.bindPopup(`<div style="padding:8px;text-align:center"><b style="color:${currentUser.color};font-size:1.125rem">📍 You Are Here</b><br><small style="color:#64748b">GPS Tracking Active</small></div>`);
+      marker.bindPopup(`<div style="padding:8px;text-align:center"><b style="color:${currentUser.color};font-size:1.125rem">📍 You Are Here</b><br><small style="color:#64748b">GPS: ${gpsAge}s old ${isFresh ? '✅' : '⚠️ Stale'}</small></div>`);
     }
   }, [currentLocation, currentUser, mapReady]);
 
@@ -878,6 +900,10 @@ function RepZoneApp() {
   };
 
   const leaderboard = getLeaderboard();
+
+  // 🚀 GPS FRESHNESS - Show GPS age in UI
+  const gpsAge = currentLocation ? getGPSAge(currentLocation) : null;
+  const gpsIsFresh = currentLocation ? isGPSFresh(currentLocation) : false;
 
   const LeaderboardView = () => (
     <div style={{padding:'1rem'}}>
@@ -1008,7 +1034,12 @@ function RepZoneApp() {
               <b style={{fontSize:'0.75rem'}}>📍 GPS</b>
               <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{padding:'0.375rem 0.75rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.375rem',fontWeight:'600',cursor:'pointer',fontSize:'0.625rem'}}>{trackingEnabled ? 'Stop' : 'Start'}</button>
             </div>
-            <p style={{fontSize:'0.625rem',color:'#64748b'}}>{trackingEnabled ? 'Active' : 'Enable to verify'}</p>
+            {/* 🚀 GPS FRESHNESS - Show age in mobile UI */}
+            <p style={{fontSize:'0.625rem',color:'#64748b'}}>
+              {trackingEnabled ? (
+                gpsAge !== null ? `Active - ${gpsAge}s old ${gpsIsFresh ? '✅' : '⚠️ Stale'}` : 'Active'
+              ) : 'Enable to verify'}
+            </p>
           </div>
 
           <div style={{marginBottom:'1rem'}}>
@@ -1069,9 +1100,9 @@ function RepZoneApp() {
       )}
 
       {trackingEnabled && !isMobile && (
-        <div style={{position:'fixed',top:'1rem',right:'1rem',background:'#10b981',color:'white',padding:'0.75rem 1.25rem',borderRadius:'2rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10001,display:'flex',gap:'0.75rem',alignItems:'center',fontSize:'0.875rem',fontWeight:'600'}}>
+        <div style={{position:'fixed',top:'1rem',right:'1rem',background:gpsIsFresh?'#10b981':'#f59e0b',color:'white',padding:'0.75rem 1.25rem',borderRadius:'2rem',boxShadow:'0 4px 12px rgba(0,0,0,0.15)',zIndex:10001,display:'flex',gap:'0.75rem',alignItems:'center',fontSize:'0.875rem',fontWeight:'600'}}>
           <div style={{width:'12px',height:'12px',background:'white',borderRadius:'50%',animation:'pulse 2s infinite'}}></div>
-          <span>GPS Active</span>
+          <span>GPS {gpsAge !== null ? `${gpsAge}s old` : 'Active'} {gpsIsFresh ? '✅' : '⚠️'}</span>
         </div>
       )}
 
@@ -1230,7 +1261,12 @@ function RepZoneApp() {
                       <b style={{fontSize:'0.875rem'}}>📍 GPS Tracking</b>
                       <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} style={{padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'600',cursor:'pointer',fontSize:'0.75rem'}}>{trackingEnabled ? 'Stop' : 'Start'}</button>
                     </div>
-                    <p style={{fontSize:'0.75rem',color:'#64748b'}}>{trackingEnabled ? '✅ Location tracking active for verification' : '⚠️ Enable to verify pin locations'}</p>
+                    {/* 🚀 GPS FRESHNESS - Show age in desktop UI */}
+                    <p style={{fontSize:'0.75rem',color:'#64748b'}}>
+                      {trackingEnabled ? (
+                        gpsAge !== null ? `✅ Active - GPS is ${gpsAge}s old ${gpsIsFresh ? '(Fresh ✅)' : '(Stale ⚠️)'}` : '✅ Location tracking active for verification'
+                      ) : '⚠️ Enable to verify pin locations'}
+                    </p>
                   </div>
 
                   <div style={{marginBottom:'1.5rem'}}>
@@ -1265,6 +1301,10 @@ function RepZoneApp() {
                       <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, dog, etc.)" style={{width:'100%',padding:'0.75rem',border:'2px solid #93c5fd',borderRadius:'0.5rem',fontSize:'0.875rem'}} />
                       {!trackingEnabled && (
                         <p style={{marginTop:'0.5rem',fontSize:'0.75rem',color:'#ef4444',fontWeight:'600'}}>⚠️ Enable GPS tracking to verify pin locations</p>
+                      )}
+                      {/* 🚀 GPS FRESHNESS - Warn if stale */}
+                      {trackingEnabled && !gpsIsFresh && (
+                        <p style={{marginTop:'0.5rem',fontSize:'0.75rem',color:'#f59e0b',fontWeight:'600'}}>⚠️ GPS data is stale - walk around to refresh</p>
                       )}
                     </div>
                   )}
