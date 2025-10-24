@@ -1942,7 +1942,7 @@ function RepZoneApp() {
             )}
 
             <div style={{display:'flex',borderBottom:'2px solid #e5e7eb'}}>
-              {[['map','🗺️ Map'],['leaderboard','🏆 Stats']].map(([tab,label]) => (
+              {[['map','🗺️ Map'],['leaderboard','🏆 Stats'],['crm','📋 CRM']].map(([tab,label]) => (
                 <button key={tab} onClick={() => setActiveTab(tab === 'map' ? 'controls' : 'leaderboard')} className={`tab ${(tab === 'map' && activeTab === 'controls') || activeTab === tab ? 'active' : ''}`} style={{flex:1,textAlign:'center'}}>{label}</button>
               ))}
             </div>
@@ -2093,6 +2093,130 @@ function RepZoneApp() {
               )}
 
               {activeTab === 'leaderboard' && <LeaderboardView />}
+
+              {activeTab === 'crm' && (
+                <div style={{padding:'1rem',height:'100%',overflow:'auto'}}>
+                  <h2 style={{fontSize:'1.75rem',fontWeight:'bold',marginBottom:'1.25rem',color:'#1e293b'}}>📋 Lead CRM</h2>
+                  
+                  {pins
+                    .filter(p => currentUser && p.team_member_id === currentUser.id)
+                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                    .map(pin => {
+                      // Extract customer info
+                      let customerInfo = null;
+                      if (pin.note && pin.note.includes(' - ') && pin.note.includes('@')) {
+                        const parts = pin.note.split(' | ');
+                        const custPart = parts[0];
+                        const custDetails = custPart.split(' - ');
+                        if (custDetails.length >= 2) {
+                          customerInfo = {
+                            name: custDetails[0],
+                            email: custDetails[1],
+                            phone: custDetails[2] || null
+                          };
+                        }
+                      }
+                      
+                      if (!customerInfo) return null;
+                      
+                      const leadType = LEAD_TYPES[pin.status] || LEAD_TYPES.knocked;
+                      
+                      return (
+                        <div key={pin.id} style={{
+                          background:'white',
+                          borderRadius:'1rem',
+                          padding:'1.25rem',
+                          marginBottom:'1rem',
+                          boxShadow:'0 2px 8px rgba(0,0,0,0.06)',
+                          border:`2px solid ${leadType.color}20`
+                        }}>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'start',marginBottom:'1rem'}}>
+                            <div>
+                              <h3 style={{fontSize:'1.25rem',fontWeight:'bold',color:'#1e293b',marginBottom:'0.25rem'}}>{customerInfo.name}</h3>
+                              <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.5rem'}}>
+                                <span style={{fontSize:'1.25rem'}}>{leadType.icon}</span>
+                                <span style={{fontSize:'0.875rem',fontWeight:'600',color:leadType.color,background:`${leadType.color}15`,padding:'0.25rem 0.75rem',borderRadius:'0.5rem'}}>{leadType.label}</span>
+                              </div>
+                            </div>
+                            <span style={{fontSize:'0.75rem',color:'#94a3b8'}}>{new Date(pin.created_at).toLocaleDateString()}</span>
+                          </div>
+                          
+                          {customerInfo.phone && (
+                            <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.5rem'}}>
+                              <span style={{fontSize:'1.25rem'}}>📞</span>
+                              <a href={`tel:${customerInfo.phone}`} style={{color:'#3b82f6',fontWeight:'600',textDecoration:'none'}}>{customerInfo.phone}</a>
+                            </div>
+                          )}
+                          
+                          {customerInfo.email && (
+                            <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.5rem'}}>
+                              <span style={{fontSize:'1.25rem'}}>📧</span>
+                              <a href={`mailto:${customerInfo.email}`} style={{color:'#3b82f6',fontWeight:'600',textDecoration:'none'}}>{customerInfo.email}</a>
+                            </div>
+                          )}
+                          
+                          {pin.address && (
+                            <div style={{display:'flex',alignItems:'start',gap:'0.5rem',marginBottom:'0.75rem'}}>
+                              <span style={{fontSize:'1.25rem'}}>📍</span>
+                              <span style={{fontSize:'0.875rem',color:'#64748b',lineHeight:'1.5'}}>{pin.address}</span>
+                            </div>
+                          )}
+                          
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.5rem',marginTop:'1rem'}}>
+                            {customerInfo.phone && (
+                              <a href={`tel:${customerInfo.phone}`} style={{
+                                padding:'0.75rem',
+                                background:'#10b981',
+                                color:'white',
+                                borderRadius:'0.75rem',
+                                textAlign:'center',
+                                fontWeight:'700',
+                                fontSize:'0.875rem',
+                                textDecoration:'none',
+                                display:'flex',
+                                alignItems:'center',
+                                justifyContent:'center',
+                                gap:'0.5rem'
+                              }}>
+                                📞 Call
+                              </a>
+                            )}
+                            {customerInfo.email && (
+                              <a href={`mailto:${customerInfo.email}`} style={{
+                                padding:'0.75rem',
+                                background:'#3b82f6',
+                                color:'white',
+                                borderRadius:'0.75rem',
+                                textAlign:'center',
+                                fontWeight:'700',
+                                fontSize:'0.875rem',
+                                textDecoration:'none',
+                                display:'flex',
+                                alignItems:'center',
+                                justifyContent:'center',
+                                gap:'0.5rem'
+                              }}>
+                                📧 Email
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }).filter(Boolean)}
+                  
+                  {pins.filter(p => {
+                    if (!currentUser || p.team_member_id !== currentUser.id) return false;
+                    if (!p.note || !p.note.includes('@')) return false;
+                    return true;
+                  }).length === 0 && (
+                    <div style={{textAlign:'center',padding:'3rem',color:'#94a3b8'}}>
+                      <div style={{fontSize:'4rem',marginBottom:'1rem'}}>📋</div>
+                      <p style={{fontSize:'1.125rem',fontWeight:'600',marginBottom:'0.5rem'}}>No Leads Yet</p>
+                      <p style={{fontSize:'0.875rem'}}>Drop pins with customer info to see them here</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2104,21 +2228,20 @@ function RepZoneApp() {
 
       {/* 📅 GHL CALENDAR MODAL */}
       {showCalendarModal && calendarData && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10003,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1.5rem',width:'100%',maxWidth:'900px',height:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
-            <div style={{padding:'1.5rem',borderBottom:'2px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg, #10b981 0%, #059669 100%)'}}>
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10003,padding:'1rem',overflow:'auto'}}>
+          <div style={{background:'white',borderRadius:'1.5rem',width:'100%',maxWidth:'900px',minHeight:'90vh',maxHeight:'95vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',margin:'auto'}}>
+            <div style={{padding:'1.5rem',borderBottom:'2px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg, #10b981 0%, #059669 100%)',flexShrink:0}}>
               <div>
                 <h2 style={{fontSize:'1.5rem',fontWeight:'bold',color:'white',marginBottom:'0.25rem'}}>📅 Book Appointment</h2>
                 <p style={{fontSize:'0.875rem',color:'rgba(255,255,255,0.9)'}}>{calendarData.name}</p>
               </div>
               <button onClick={() => setShowCalendarModal(false)} className="modern-button" style={{padding:'0.75rem',background:'rgba(255,255,255,0.2)',border:'none',borderRadius:'0.75rem',color:'white',fontSize:'1.5rem',cursor:'pointer',width:'44px',height:'44px'}}>✕</button>
             </div>
-            <div style={{flex:1,overflow:'hidden',position:'relative'}}>
+            <div style={{flex:1,overflow:'auto',position:'relative',WebkitOverflowScrolling:'touch'}}>
               <iframe 
                 src="https://sea.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8"
-                style={{width:'100%',height:'100%',border:'none'}}
+                style={{width:'100%',minHeight:'900px',border:'none',display:'block'}}
                 title="GHL Calendar"
-                scrolling="no"
               />
             </div>
           </div>
