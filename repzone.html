@@ -439,17 +439,13 @@ async function sendContactToGHL(contactData) {
 
 // 📅 Open GHL booking calendar
 function openGHLCalendar(customerName, customerEmail, customerPhone, address) {
-  // Pre-fill calendar with customer info
-  const params = new URLSearchParams({
+  // Store calendar data and show modal
+  window.showCalendarModal({
     name: customerName || '',
     email: customerEmail || '',
     phone: customerPhone || '',
     address: address || ''
   });
-  
-  // Use onsite estimates calendar
-  const calendarUrl = `${GHL_CONFIG.calendarUrls.onsite}?${params.toString()}`;
-  window.open(calendarUrl, '_blank', 'width=800,height=900');
 }
 
 function RepZoneApp() {
@@ -488,6 +484,8 @@ function RepZoneApp() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarData, setCalendarData] = useState(null);
   const [pendingPinLocation, setPendingPinLocation] = useState(null);
   const [fdMode, setFdMode] = useState(false);
   
@@ -806,10 +804,15 @@ function RepZoneApp() {
     window.deletePinGlobal = deletePin;
     window.updatePinStatusGlobal = updatePinStatus;
     window.openGHLCalendarGlobal = openGHLCalendar;
+    window.showCalendarModal = (data) => {
+      setCalendarData(data);
+      setShowCalendarModal(true);
+    };
     return () => {
       delete window.deletePinGlobal;
       delete window.updatePinStatusGlobal;
       delete window.openGHLCalendarGlobal;
+      delete window.showCalendarModal;
     };
   }, [currentUser]);
 
@@ -2097,6 +2100,28 @@ function RepZoneApp() {
           <div ref={mapRef} style={{height:'100%',width:'100%'}}></div>
         </div>
       </div>
+
+      {/* 📅 GHL CALENDAR MODAL */}
+      {showCalendarModal && calendarData && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10003,padding:'1rem'}}>
+          <div style={{background:'white',borderRadius:'1.5rem',width:'100%',maxWidth:'900px',height:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+            <div style={{padding:'1.5rem',borderBottom:'2px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg, #10b981 0%, #059669 100%)'}}>
+              <div>
+                <h2 style={{fontSize:'1.5rem',fontWeight:'bold',color:'white',marginBottom:'0.25rem'}}>📅 Book Appointment</h2>
+                <p style={{fontSize:'0.875rem',color:'rgba(255,255,255,0.9)'}}>{calendarData.name}</p>
+              </div>
+              <button onClick={() => setShowCalendarModal(false)} className="modern-button" style={{padding:'0.75rem',background:'rgba(255,255,255,0.2)',border:'none',borderRadius:'0.75rem',color:'white',fontSize:'1.5rem',cursor:'pointer',width:'44px',height:'44px'}}>✕</button>
+            </div>
+            <div style={{flex:1,overflow:'hidden',position:'relative'}}>
+              <iframe 
+                src={`https://form.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8`}
+                style={{width:'100%',height:'100%',border:'none'}}
+                title="GHL Calendar"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
