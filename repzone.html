@@ -479,6 +479,17 @@ function RepZoneApp() {
     }
   }, []);
 
+  // Sync currentUser with teamMembers to get updated role from database
+  useEffect(() => {
+    if (currentUser && teamMembers.length > 0) {
+      const updatedUser = teamMembers.find(m => m.id === currentUser.id);
+      if (updatedUser && updatedUser.role !== currentUser.role) {
+        setCurrentUser(updatedUser);
+        localStorage.setItem('current_user_id', JSON.stringify(updatedUser));
+      }
+    }
+  }, [teamMembers]);
+
   useEffect(() => {
     if (!supabase.current) return;
     loadLiveLocations();
@@ -1284,16 +1295,16 @@ function RepZoneApp() {
   }
 
   const stats = {
-    totalPins: pins.length,
-    estimates: pins.filter(p => p.status === 'estimate').length,
-    callbacks: pins.filter(p => p.status === 'callback').length,
-    notinterested: pins.filter(p => p.status === 'notinterested').length,
-    knocked: pins.filter(p => p.status === 'knocked').length,
-    verified: pins.filter(p => p.verification_status === 'verified').length,
-    suspicious: pins.filter(p => p.verification_status === 'suspicious').length,
+    totalPins: currentUser ? pins.filter(p => p.team_member_id === currentUser.id).length : 0,
+    estimates: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.status === 'estimate').length : 0,
+    callbacks: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.status === 'callback').length : 0,
+    notinterested: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.status === 'notinterested').length : 0,
+    knocked: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.status === 'knocked').length : 0,
+    verified: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.verification_status === 'verified').length : 0,
+    suspicious: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.verification_status === 'suspicious').length : 0,
     onlineUsers: liveLocations.filter(l => new Date(l.last_updated) > new Date(Date.now() - 5 * 60 * 1000)).length,
-    withAddress: pins.filter(p => p.address).length,
-    withoutAddress: pins.filter(p => !p.address).length
+    withAddress: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.address).length : 0,
+    withoutAddress: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && !p.address).length : 0
   };
 
   const leaderboard = getLeaderboard();
