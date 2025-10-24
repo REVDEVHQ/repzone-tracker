@@ -407,6 +407,10 @@ function RepZoneApp() {
   const [addressSearch, setAddressSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [pendingPinLocation, setPendingPinLocation] = useState(null);
   
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -813,6 +817,83 @@ function RepZoneApp() {
     }, 300);
   }, [loading, isMobile]);
 
+  async function dropPinAtLocation(lat, lng, custName, custPhone) {
+    setSaving(true);
+    setGeocoding(true);
+
+    try {
+      // 🏠 GET FULL ADDRESS + SNAP TO BUILDING
+      const addressData = await reverseGeocode(lat, lng);
+      
+      let finalLat = lat;
+      let finalLng = lng;
+      let address = null;
+      let shortAddress = null;
+      
+      if (addressData && addressData.fullAddress !== 'Address Not Found') {
+        finalLat = addressData.lat;
+        finalLng = addressData.lng;
+        address = addressData.fullAddress;
+        shortAddress = addressData.shortAddress;
+        
+        showToast(`📍 Found: ${shortAddress}`, 3000);
+      } else {
+        showToast('⚠️ No address found - saving location anyway', 3000);
+      }
+
+      const distance = calculateDistance(currentLocation.lat, currentLocation.lng, finalLat, finalLng);
+      const verification = getVerificationStatus(distance);
+      const clickedZone = zones.find(z => {
+        if (!z.points || z.points.length < 3) return false;
+        return isPointInPolygon([finalLat, finalLng], z.points);
+      });
+
+      const newPin = {
+        id: `pin-${Date.now()}`,
+        lat: finalLat, 
+        lng: finalLng, 
+        status,
+        address: address, // 🏠 STORE FULL ADDRESS
+        rep_name: currentUser.name,
+        team_member_id: currentUser.id,
+        zone_id: clickedZone?.id || null,
+        note: note || null,
+        customer_name: custName || null,
+        customer_phone: custPhone || null,
+        actual_lat: currentLocation.lat,
+        actual_lng: currentLocation.lng,
+        distance_from_pin: Math.round(distance),
+        verification_status: verification.status,
+        created_at: new Date().toISOString()
+      };
+      
+      await setSupabaseUser(currentUser.id);
+      const { data, error } = await supabase.current.from('pins').insert([newPin]).select();
+      
+      if (error) {
+        showToast('❌ Error saving pin: ' + error.message);
+      } else {
+        setPins(prev => [...prev, newPin]);
+        setNote("");
+        const leadTypeLabel = LEAD_TYPES[status]?.label || status;
+        const gpsAge = getGPSAge(currentLocation);
+        const custInfo = custName ? ` for ${custName}` : '';
+        if (verification.status === 'verified') {
+          showToast(`✅ ${leadTypeLabel}${custInfo} at ${shortAddress || 'location'}! (${Math.round(distance)}ft, GPS: ${gpsAge}s)`, 5000);
+        } else if (verification.status === 'suspicious') {
+          showToast(`⚠️ ${leadTypeLabel}${custInfo} saved but ${Math.round(distance)}ft away - marked suspicious`, 5000);
+        } else {
+          showToast(`⚠️ ${leadTypeLabel}${custInfo} saved (${Math.round(distance)}ft - questionable)`, 5000);
+        }
+      }
+    } catch (error) {
+      showToast('❌ Error: ' + error.message);
+    }
+    
+    setSaving(false);
+    setGeocoding(false);
+  }
+
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !mapReady) return;
@@ -832,77 +913,15 @@ function RepZoneApp() {
           return;
         }
 
-        setSaving(true);
-        setGeocoding(true);
-
-        try {
-          // 🏠 GET FULL ADDRESS + SNAP TO BUILDING
-          const addressData = await reverseGeocode(lat, lng);
-          
-          let finalLat = lat;
-          let finalLng = lng;
-          let address = null;
-          let shortAddress = null;
-          
-          if (addressData && addressData.fullAddress !== 'Address Not Found') {
-            finalLat = addressData.lat;
-            finalLng = addressData.lng;
-            address = addressData.fullAddress;
-            shortAddress = addressData.shortAddress;
-            
-            showToast(`📍 Found: ${shortAddress}`, 3000);
-          } else {
-            showToast('⚠️ No address found - saving location anyway', 3000);
-          }
-
-          const distance = calculateDistance(currentLocation.lat, currentLocation.lng, finalLat, finalLng);
-          const verification = getVerificationStatus(distance);
-          const clickedZone = zones.find(z => {
-            if (!z.points || z.points.length < 3) return false;
-            return isPointInPolygon([finalLat, finalLng], z.points);
-          });
-
-          const newPin = {
-            id: `pin-${Date.now()}`,
-            lat: finalLat, 
-            lng: finalLng, 
-            status,
-            address: address, // 🏠 STORE FULL ADDRESS
-            rep_name: currentUser.name,
-            team_member_id: currentUser.id,
-            zone_id: clickedZone?.id || null,
-            note: note || null,
-            actual_lat: currentLocation.lat,
-            actual_lng: currentLocation.lng,
-            distance_from_pin: Math.round(distance),
-            verification_status: verification.status,
-            created_at: new Date().toISOString()
-          };
-          
-          await setSupabaseUser(currentUser.id);
-          const { data, error } = await supabase.current.from('pins').insert([newPin]).select();
-          
-          if (error) {
-            showToast('❌ Error saving pin: ' + error.message);
-          } else {
-            setPins(prev => [...prev, newPin]);
-            setNote("");
-            const leadTypeLabel = LEAD_TYPES[status]?.label || status;
-            const gpsAge = getGPSAge(currentLocation);
-            if (verification.status === 'verified') {
-              showToast(`✅ ${leadTypeLabel} at ${shortAddress || 'location'}! (${Math.round(distance)}ft, GPS: ${gpsAge}s)`, 5000);
-            } else if (verification.status === 'suspicious') {
-              showToast(`⚠️ ${leadTypeLabel} saved but ${Math.round(distance)}ft away - marked suspicious`, 5000);
-            } else {
-              showToast(`⚠️ ${leadTypeLabel} saved (${Math.round(distance)}ft - questionable)`, 5000);
-            }
-          }
-        } catch (error) {
-          showToast('❌ Error: ' + error.message);
+        // Check if "FD" is in the note field - bypass customer form
+        if (note.toUpperCase().includes('FD')) {
+          // Directly drop pin without customer form
+          await dropPinAtLocation(lat, lng, '', '');
+        } else {
+          // Show customer form popup
+          setPendingPinLocation({ lat, lng });
+          setShowCustomerForm(true);
         }
-        
-        setSaving(false);
-        setGeocoding(false);
       } else if (mode === "draw-zone") {
         if (currentUser?.role !== 'admin') {
           showToast('⚠️ Only admins can create zones!');
@@ -1425,6 +1444,60 @@ function RepZoneApp() {
     <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#f8fafc'}}>
       {toastMessage && <div className="toast">{toastMessage}</div>}
 
+      {/* CUSTOMER INFO FORM MODAL */}
+      {showCustomerForm && pendingPinLocation && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10003,padding:'1rem'}}>
+          <div style={{background:'white',borderRadius:'1.5rem',padding:'2rem',maxWidth:'440px',width:'100%',boxShadow:'0 20px 40px rgba(0,0,0,0.3)',animation:'fadeIn 0.3s ease'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.5rem'}}>
+              <h3 style={{fontSize:'1.5rem',fontWeight:'bold',color:'#1e293b'}}>📋 Customer Info</h3>
+              <button 
+                onClick={() => {
+                  setShowCustomerForm(false);
+                  setPendingPinLocation(null);
+                  setCustomerName('');
+                  setCustomerPhone('');
+                }} 
+                className="modern-button" 
+                style={{width:'40px',height:'40px',borderRadius:'50%',border:'none',background:'#f1f5f9',fontSize:'1.5rem',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                ×
+              </button>
+            </div>
+            <div style={{marginBottom:'1.25rem'}}>
+              <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Customer Name</label>
+              <input 
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Enter customer name..."
+                autoFocus
+                style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}
+              />
+            </div>
+            <div style={{marginBottom:'1.5rem'}}>
+              <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Phone Number <span style={{color:'#64748b',fontWeight:'400'}}>(optional)</span></label>
+              <input 
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="(555) 123-4567"
+                style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}
+              />
+            </div>
+            <button
+              onClick={async () => {
+                setShowCustomerForm(false);
+                await dropPinAtLocation(pendingPinLocation.lat, pendingPinLocation.lng, customerName, customerPhone);
+                setPendingPinLocation(null);
+                setCustomerName('');
+                setCustomerPhone('');
+              }}
+              className="modern-button"
+              style={{width:'100%',padding:'1rem',background:'#3b82f6',color:'white',border:'none',borderRadius:'0.75rem',fontSize:'1rem',fontWeight:'700',boxShadow:'0 4px 12px rgba(59,130,246,0.3)'}}
+            >
+              📍 Drop Pin
+            </button>
+          </div>
+        </div>
+      )}
+
       {(saving || geocoding) && (
         <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',padding:'2rem 2.5rem',borderRadius:'1.5rem',boxShadow:'0 20px 40px rgba(0,0,0,0.2)',zIndex:10001,display:'flex',flexDirection:'column',gap:'1rem',alignItems:'center'}}>
           <div className="spinner" style={{width:'40px',height:'40px',borderWidth:'4px',borderTopColor:'#3b82f6'}}></div>
@@ -1676,6 +1749,7 @@ function RepZoneApp() {
                         ))}
                       </div>
                       <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, dog, etc.)" style={{width:'100%',padding:'0.875rem',border:'2px solid #93c5fd',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}} />
+                      <p style={{marginTop:'0.5rem',fontSize:'0.75rem',color:'#3b82f6',fontWeight:'600'}}>💡 Type "FD" in notes to skip customer form</p>
                       {!trackingEnabled && (
                         <p style={{marginTop:'0.75rem',fontSize:'0.8125rem',color:'#ef4444',fontWeight:'700'}}>⚠️ Enable GPS tracking to verify pin locations</p>
                       )}
