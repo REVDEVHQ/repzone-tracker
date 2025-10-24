@@ -1427,6 +1427,15 @@ function RepZoneApp() {
   const gpsAge = currentLocation ? getGPSAge(currentLocation) : null;
   const gpsIsFresh = currentLocation ? isGPSFresh(currentLocation) : false;
 
+  // Initialize GHL calendar when modal opens
+  useEffect(() => {
+    if (showCalendarModal && window.GHLFormEmbed) {
+      setTimeout(() => {
+        window.GHLFormEmbed.init();
+      }, 500);
+    }
+  }, [showCalendarModal]);
+
   const LeaderboardView = () => (
     <div style={{padding:'1rem'}}>
       <h2 style={{fontSize:'1.75rem',fontWeight:'bold',marginBottom:'1.25rem',color:'#1e293b'}}>🏆 Leaderboard</h2>
@@ -2104,21 +2113,21 @@ function RepZoneApp() {
 
       {/* 📅 GHL CALENDAR MODAL */}
       {showCalendarModal && calendarData && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10003,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1.5rem',width:'100%',maxWidth:'900px',height:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
-            <div style={{padding:'1.5rem',borderBottom:'2px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg, #10b981 0%, #059669 100%)'}}>
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10003,padding:'1rem',overflow:'auto'}}>
+          <div style={{background:'white',borderRadius:'1.5rem',width:'100%',maxWidth:'900px',minHeight:'90vh',maxHeight:'95vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',margin:'auto'}}>
+            <div style={{padding:'1.5rem',borderBottom:'2px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg, #10b981 0%, #059669 100%)',flexShrink:0}}>
               <div>
                 <h2 style={{fontSize:'1.5rem',fontWeight:'bold',color:'white',marginBottom:'0.25rem'}}>📅 Book Appointment</h2>
                 <p style={{fontSize:'0.875rem',color:'rgba(255,255,255,0.9)'}}>{calendarData.name}</p>
               </div>
               <button onClick={() => setShowCalendarModal(false)} className="modern-button" style={{padding:'0.75rem',background:'rgba(255,255,255,0.2)',border:'none',borderRadius:'0.75rem',color:'white',fontSize:'1.5rem',cursor:'pointer',width:'44px',height:'44px'}}>✕</button>
             </div>
-            <div style={{flex:1,overflow:'hidden',position:'relative'}}>
+            <div style={{flex:1,overflow:'auto',position:'relative',minHeight:'600px'}}>
               <iframe 
                 src="https://sea.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8"
-                style={{width:'100%',height:'100%',border:'none'}}
+                style={{width:'100%',minHeight:'800px',height:'100%',border:'none',display:'block'}}
                 title="GHL Calendar"
-                scrolling="no"
+                allow="geolocation"
               />
             </div>
           </div>
