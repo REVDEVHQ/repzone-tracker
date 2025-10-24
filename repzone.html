@@ -7,6 +7,7 @@
 <title>RepZone Tracker</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://sea.refinedpainting.co/js/form_embed.js" type="text/javascript"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; width: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif; }
@@ -384,8 +385,8 @@ const GHL_CONFIG = {
   apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2NhdGlvbl9pZCI6ImVuMmQ4Q2FxR0Q4YTNTRU1WRkhaIiwidmVyc2lvbiI6MSwiaWF0IjoxNzUyODYxNDIyMzU2LCJzdWIiOiJuMGFvVnBNQlJ1TjRKSGJEUWJXeiJ9.AZc26Y3MqBK8SUdc8PyufVwrUsrS7kac1mnAhFJDlHA',
   locationId: 'en2d8CaqGD8a3SEMVFHz',
   calendarUrls: {
-    onsite: 'https://form.refinedpainting.co/widget/bookings/onsiteestimates',
-    general: 'https://form.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8'
+    onsite: 'https://sea.refinedpainting.co/widget/bookings/onsiteestimates',
+    general: 'https://sea.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8'
   }
 };
 
@@ -2114,9 +2115,10 @@ function RepZoneApp() {
             </div>
             <div style={{flex:1,overflow:'hidden',position:'relative'}}>
               <iframe 
-                src={`https://form.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8`}
+                src="https://sea.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8"
                 style={{width:'100%',height:'100%',border:'none'}}
                 title="GHL Calendar"
+                scrolling="no"
               />
             </div>
           </div>
