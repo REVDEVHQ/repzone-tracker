@@ -376,6 +376,82 @@ async function forwardGeocode(query) {
   }
 }
 
+// ============================================
+// 🔗 GOHIGHLEVEL INTEGRATION
+// ============================================
+
+const GHL_CONFIG = {
+  apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2NhdGlvbl9pZCI6ImVuMmQ4Q2FxR0Q4YTNTRU1WRkhaIiwidmVyc2lvbiI6MSwiaWF0IjoxNzUyODYxNDIyMzU2LCJzdWIiOiJuMGFvVnBNQlJ1TjRKSGJEUWJXeiJ9.AZc26Y3MqBK8SUdc8PyufVwrUsrS7kac1mnAhFJDlHA',
+  locationId: 'en2d8CaqGD8a3SEMVFHz',
+  calendarUrls: {
+    onsite: 'https://form.refinedpainting.co/widget/bookings/onsiteestimates',
+    general: 'https://form.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8'
+  }
+};
+
+// 📤 Send contact to GHL
+async function sendContactToGHL(contactData) {
+  try {
+    const response = await fetch('https://rest.gohighlevel.com/v1/contacts/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GHL_CONFIG.apiKey}`,
+        'Content-Type': 'application/json',
+        'Version': '2021-07-28'
+      },
+      body: JSON.stringify({
+        locationId: GHL_CONFIG.locationId,
+        firstName: contactData.name?.split(' ')[0] || contactData.name,
+        lastName: contactData.name?.split(' ').slice(1).join(' ') || '',
+        name: contactData.name,
+        email: contactData.email || '',
+        phone: contactData.phone || '',
+        address1: contactData.address || '',
+        tags: [
+          'Door-to-Door',
+          contactData.leadType || 'Unknown',
+          contactData.verified ? 'GPS-Verified' : 'Unverified'
+        ],
+        source: 'RepZone App',
+        customField: {
+          rep_name: contactData.repName,
+          lead_type: contactData.leadType,
+          gps_distance: contactData.distance,
+          pin_created_at: contactData.createdAt
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('GHL Error:', errorText);
+      throw new Error(`GHL API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Contact created in GHL:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Failed to send to GHL:', error);
+    throw error;
+  }
+}
+
+// 📅 Open GHL booking calendar
+function openGHLCalendar(customerName, customerEmail, customerPhone, address) {
+  // Pre-fill calendar with customer info
+  const params = new URLSearchParams({
+    name: customerName || '',
+    email: customerEmail || '',
+    phone: customerPhone || '',
+    address: address || ''
+  });
+  
+  // Use onsite estimates calendar
+  const calendarUrl = `${GHL_CONFIG.calendarUrls.onsite}?${params.toString()}`;
+  window.open(calendarUrl, '_blank', 'width=800,height=900');
+}
+
 function RepZoneApp() {
   const [pins, setPins] = useState([]);
   const [zones, setZones] = useState([]);
@@ -729,9 +805,11 @@ function RepZoneApp() {
   useEffect(() => {
     window.deletePinGlobal = deletePin;
     window.updatePinStatusGlobal = updatePinStatus;
+    window.openGHLCalendarGlobal = openGHLCalendar;
     return () => {
       delete window.deletePinGlobal;
       delete window.updatePinStatusGlobal;
+      delete window.openGHLCalendarGlobal;
     };
   }, [currentUser]);
 
@@ -961,6 +1039,28 @@ function RepZoneApp() {
         const leadTypeLabel = LEAD_TYPES[status]?.label || status;
         const gpsAge = getGPSAge(currentLocation);
         const custInfo = custName ? ` for ${custName}` : '';
+        
+        // 🔗 Send to GHL if customer info provided
+        if (custName && (custEmail || custPhone)) {
+          try {
+            await sendContactToGHL({
+              name: custName,
+              email: custEmail,
+              phone: custPhone,
+              address: address,
+              leadType: leadTypeLabel,
+              repName: currentUser.name,
+              verified: verification.status === 'verified',
+              distance: Math.round(distance),
+              createdAt: newPin.created_at
+            });
+            showToast('✅ Contact added to GHL!', 3000);
+          } catch (ghlError) {
+            console.error('GHL sync failed:', ghlError);
+            showToast('⚠️ Pin saved but GHL sync failed', 3000);
+          }
+        }
+        
         if (verification.status === 'verified') {
           showToast(`✅ ${leadTypeLabel}${custInfo} at ${shortAddress || 'location'}! (${Math.round(distance)}ft, GPS: ${gpsAge}s)`, 5000);
         } else if (verification.status === 'suspicious') {
@@ -1200,6 +1300,10 @@ function RepZoneApp() {
                 <button onclick="window.updatePinStatusGlobal('${pin.id}','${key}')" class="modern-button" style="padding:10px 6px;background:${type.color};color:white;border:none;border-radius:8px;font-size:16px;font-weight:700;box-shadow:0 2px 6px ${type.color}40">${type.display}</button>
               `).join('')}
             </div>
+            
+            ${customerInfo ? `
+              <button onclick="window.openGHLCalendarGlobal('${customerInfo.name}','${customerInfo.email || ''}','${customerInfo.phone || ''}','${pin.address || ''}')" class="modern-button" style="width:100%;padding:12px;background:#10b981;color:white;border:none;border-radius:10px;font-weight:700;font-size:14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(16,185,129,0.3)">📅 Book Appointment</button>
+            ` : ''}
             
             <button onclick="window.deletePinGlobal('${pin.id}')" class="modern-button" style="width:100%;padding:12px;background:#ef4444;color:white;border:none;border-radius:10px;font-weight:700;font-size:14px;box-shadow:0 2px 8px rgba(239,68,68,0.3)">🗑️ Delete Pin</button>
           </div>
