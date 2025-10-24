@@ -819,13 +819,32 @@ function RepZoneApp() {
  useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current || loading) return;
     
+    // Try to get user's current location for initial map center
+    let initialLat = 47.6062;
+    let initialLng = -122.3321;
+    let initialZoom = isMobile ? 12 : 13;
+
     const map = L.map(mapRef.current, {
-      center: [47.6062, -122.3321],
-      zoom: isMobile ? 12 : 13,
+      center: [initialLat, initialLng],
+      zoom: initialZoom,
       zoomControl: !isMobile,
       tap: true,
       tapTolerance: 15
     });
+
+    // Auto-center on user's location when available
+    if (currentLocation) {
+      map.setView([currentLocation.lat, currentLocation.lng], 16);
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          map.setView([position.coords.latitude, position.coords.longitude], 16);
+        },
+        (error) => {
+          console.log('Using default Seattle location');
+        }
+      );
+    }
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
@@ -845,6 +864,15 @@ function RepZoneApp() {
       setMapReady(true);
     }, 300);
   }, [loading, isMobile]);
+
+  // Auto-center map when GPS location first becomes available
+  useEffect(() => {
+    if (currentLocation && mapInstanceRef.current && !mapInstanceRef.current._locationCentered) {
+      mapInstanceRef.current.setView([currentLocation.lat, currentLocation.lng], 16);
+      mapInstanceRef.current._locationCentered = true; // Only do this once
+    }
+  }, [currentLocation]);
+
 
   async function dropPinAtLocation(lat, lng, custName, custPhone, custEmail) {
     setSaving(true);
@@ -1099,19 +1127,19 @@ function RepZoneApp() {
           </div>
           
           <div style="padding:16px;background:white">
-            ${pin.address ? `
-              <div style="padding:12px;background:#f8fafc;border-left:4px solid #3b82f6;margin-bottom:12px;border-radius:6px">
-                <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">📍 ADDRESS</div>
-                <div style="font-weight:600;color:#1e293b;font-size:14px;line-height:1.5">${pin.address}</div>
+            ${customerInfo ? `
+              <div style="padding:14px;background:linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);border-left:4px solid #3b82f6;margin-bottom:12px;border-radius:8px;box-shadow:0 2px 8px rgba(59,130,246,0.1)">
+                <div style="font-size:13px;color:#1e3a8a;font-weight:700;margin-bottom:8px;letter-spacing:0.5px">👤 CUSTOMER INFO</div>
+                <div style="font-weight:700;color:#1e293b;font-size:15px;margin-bottom:6px">${customerInfo.name}</div>
+                ${customerInfo.email ? `<div style="color:#3b82f6;font-size:13px;margin-bottom:4px;display:flex;align-items:center;gap:6px"><span>📧</span><span>${customerInfo.email}</span></div>` : ''}
+                ${customerInfo.phone ? `<div style="color:#3b82f6;font-size:13px;display:flex;align-items:center;gap:6px"><span>📞</span><span>${customerInfo.phone}</span></div>` : ''}
               </div>
             ` : ''}
             
-            ${customerInfo ? `
-              <div style="padding:12px;background:#dbeafe;border-left:4px solid #3b82f6;margin-bottom:12px;border-radius:6px">
-                <div style="font-size:12px;color:#1e3a8a;font-weight:600;margin-bottom:6px">👤 CUSTOMER</div>
-                <div style="font-weight:700;color:#1e293b;font-size:14px;margin-bottom:4px">${customerInfo.name}</div>
-                ${customerInfo.email ? `<div style="color:#64748b;font-size:12px;margin-bottom:2px">📧 ${customerInfo.email}</div>` : ''}
-                ${customerInfo.phone ? `<div style="color:#64748b;font-size:12px">📞 ${customerInfo.phone}</div>` : ''}
+            ${pin.address ? `
+              <div style="padding:12px;background:#f8fafc;border-left:4px solid #64748b;margin-bottom:12px;border-radius:6px">
+                <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">📍 ADDRESS</div>
+                <div style="font-weight:600;color:#1e293b;font-size:13px;line-height:1.5">${pin.address}</div>
               </div>
             ` : ''}
             
