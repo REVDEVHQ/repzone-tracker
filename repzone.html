@@ -410,7 +410,9 @@ function RepZoneApp() {
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [pendingPinLocation, setPendingPinLocation] = useState(null);
+  const [fdMode, setFdMode] = useState(false);
   
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -455,6 +457,23 @@ function RepZoneApp() {
         requestLocationPermission(user);
       } catch (e) {
         console.error('Error parsing saved user:', e);
+      }
+    } else {
+      // Auto-request GPS even without a user selected
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const loc = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              timestamp: Date.now()
+            };
+            setCurrentLocation(loc);
+          },
+          (error) => {
+            console.log('GPS permission not granted yet');
+          }
+        );
       }
     }
   }, []);
@@ -817,7 +836,7 @@ function RepZoneApp() {
     }, 300);
   }, [loading, isMobile]);
 
-  async function dropPinAtLocation(lat, lng, custName, custPhone) {
+  async function dropPinAtLocation(lat, lng, custName, custPhone, custEmail) {
     setSaving(true);
     setGeocoding(true);
 
@@ -848,18 +867,22 @@ function RepZoneApp() {
         return isPointInPolygon([finalLat, finalLng], z.points);
       });
 
+      // Build note with customer info if in FD mode
+      let finalNote = note || null;
+      if (fdMode && custName) {
+        finalNote = `${custName}${custPhone ? ' - ' + custPhone : ''}${custEmail ? ' - ' + custEmail : ''}${note ? ' | ' + note : ''}`;
+      }
+
       const newPin = {
         id: `pin-${Date.now()}`,
         lat: finalLat, 
         lng: finalLng, 
         status,
-        address: address, // 🏠 STORE FULL ADDRESS
+        address: address,
         rep_name: currentUser.name,
         team_member_id: currentUser.id,
         zone_id: clickedZone?.id || null,
-        note: note || null,
-        customer_name: custName || null,
-        customer_phone: custPhone || null,
+        note: finalNote,
         actual_lat: currentLocation.lat,
         actual_lng: currentLocation.lng,
         distance_from_pin: Math.round(distance),
@@ -913,10 +936,10 @@ function RepZoneApp() {
           return;
         }
 
-        // Check if "FD" is in the note field - bypass customer form
-        if (note.toUpperCase().includes('FD')) {
+        // Check if FD mode is active - bypass customer form
+        if (fdMode) {
           // Directly drop pin without customer form
-          await dropPinAtLocation(lat, lng, '', '');
+          await dropPinAtLocation(lat, lng, '', '', '');
         } else {
           // Show customer form popup
           setPendingPinLocation({ lat, lng });
@@ -1456,19 +1479,30 @@ function RepZoneApp() {
                   setPendingPinLocation(null);
                   setCustomerName('');
                   setCustomerPhone('');
+                  setCustomerEmail('');
                 }} 
                 className="modern-button" 
                 style={{width:'40px',height:'40px',borderRadius:'50%',border:'none',background:'#f1f5f9',fontSize:'1.5rem',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 ×
               </button>
             </div>
-            <div style={{marginBottom:'1.25rem'}}>
+            <div style={{marginBottom:'1rem'}}>
               <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Customer Name</label>
               <input 
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="Enter customer name..."
                 autoFocus
+                style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}
+              />
+            </div>
+            <div style={{marginBottom:'1rem'}}>
+              <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Email <span style={{color:'#64748b',fontWeight:'400'}}>(optional)</span></label>
+              <input 
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                placeholder="customer@email.com"
+                type="email"
                 style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}
               />
             </div>
@@ -1484,10 +1518,11 @@ function RepZoneApp() {
             <button
               onClick={async () => {
                 setShowCustomerForm(false);
-                await dropPinAtLocation(pendingPinLocation.lat, pendingPinLocation.lng, customerName, customerPhone);
+                await dropPinAtLocation(pendingPinLocation.lat, pendingPinLocation.lng, customerName, customerPhone, customerEmail);
                 setPendingPinLocation(null);
                 setCustomerName('');
                 setCustomerPhone('');
+                setCustomerEmail('');
               }}
               className="modern-button"
               style={{width:'100%',padding:'1rem',background:'#3b82f6',color:'white',border:'none',borderRadius:'0.75rem',fontSize:'1rem',fontWeight:'700',boxShadow:'0 4px 12px rgba(59,130,246,0.3)'}}
@@ -1739,6 +1774,34 @@ function RepZoneApp() {
 
                   {mode === "drop-pin" && (
                     <div className="stat-card" style={{background:'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)',border:'2px solid #3b82f6',marginBottom:'1.25rem'}}>
+                      <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.875rem',color:'#1e3a8a'}}>⚡ Quick Drop Mode</label>
+                      <button 
+                        onClick={() => setFdMode(!fdMode)} 
+                        className="modern-button" 
+                        style={{
+                          width:'100%',
+                          padding:'1rem',
+                          borderRadius:'0.75rem',
+                          border:fdMode?'none':'2px solid #bfdbfe',
+                          background:fdMode?'#ef4444':'white',
+                          color:fdMode?'white':'#64748b',
+                          fontSize:'1rem',
+                          fontWeight:'700',
+                          marginBottom:'1rem',
+                          boxShadow:fdMode?'0 4px 12px rgba(239,68,68,0.3)':'none',
+                          display:'flex',
+                          alignItems:'center',
+                          justifyContent:'center',
+                          gap:'0.5rem'
+                        }}
+                      >
+                        <span style={{fontSize:'1.5rem'}}>🚫</span>
+                        <span>FD MODE {fdMode ? 'ON' : 'OFF'}</span>
+                      </button>
+                      <p style={{fontSize:'0.75rem',color:fdMode?'#ef4444':'#64748b',fontWeight:'600',marginBottom:'1rem',textAlign:'center'}}>
+                        {fdMode ? '⚡ Customer form will be SKIPPED' : '💡 Click to skip customer form'}
+                      </p>
+                      
                       <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.875rem',color:'#1e3a8a'}}>💰 Lead Type</label>
                       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.75rem',marginBottom:'1rem'}}>
                         {[['estimate','💰','A','#10b981'],['callback','📞','B','#f59e0b'],['notinterested','📋','C','#64748b']].map(([s,icon,display,color]) => (
@@ -1749,7 +1812,6 @@ function RepZoneApp() {
                         ))}
                       </div>
                       <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, dog, etc.)" style={{width:'100%',padding:'0.875rem',border:'2px solid #93c5fd',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}} />
-                      <p style={{marginTop:'0.5rem',fontSize:'0.75rem',color:'#3b82f6',fontWeight:'600'}}>💡 Type "FD" in notes to skip customer form</p>
                       {!trackingEnabled && (
                         <p style={{marginTop:'0.75rem',fontSize:'0.8125rem',color:'#ef4444',fontWeight:'700'}}>⚠️ Enable GPS tracking to verify pin locations</p>
                       )}
