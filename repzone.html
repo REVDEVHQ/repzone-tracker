@@ -1568,9 +1568,9 @@ function RepZoneApp() {
         </div>
       )}
 
-      <div style={{display:'flex',marginBottom:'1rem',background:'#f1f5f9',borderRadius:'0.75rem',padding:'0.375rem'}}>
-        {[['controls','⚙️ Controls'],['stats','📊 Stats'],['leaderboard','🏆 Board']].map(([tab,label]) => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className="modern-button" style={{flex:1,padding:'0.75rem 0.5rem',borderRadius:'0.5rem',border:'none',background:activeTab===tab?'white':'transparent',color:activeTab===tab?'#1e293b':'#64748b',fontWeight:'700',fontSize:'0.8125rem',boxShadow:activeTab===tab?'0 2px 6px rgba(0,0,0,0.06)':'none'}}>{label}</button>
+      <div style={{display:'flex',marginBottom:'1rem',background:'#f1f5f9',borderRadius:'0.75rem',padding:'0.375rem',overflowX:'auto'}}>
+        {[['controls','⚙️ Controls'],['stats','📊 Stats'],['leaderboard','🏆 Board'],['crm','📋 CRM']].map(([tab,label]) => (
+          <button key={tab} onClick={() => setActiveTab(tab)} className="modern-button" style={{flex:1,padding:'0.75rem 0.5rem',borderRadius:'0.5rem',border:'none',background:activeTab===tab?'white':'transparent',color:activeTab===tab?'#1e293b':'#64748b',fontWeight:'700',fontSize:'0.8125rem',boxShadow:activeTab===tab?'0 2px 6px rgba(0,0,0,0.06)':'none',whiteSpace:'nowrap',minWidth:'fit-content'}}>{label}</button>
         ))}
       </div>
 
