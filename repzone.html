@@ -2092,7 +2092,7 @@ function RepZoneApp() {
 
             <div style={{display:'flex',borderBottom:'2px solid #e5e7eb'}}>
               {[['map','🗺️ Map'],['leaderboard','🏆 Stats'],['crm','📋 CRM']].map(([tab,label]) => (
-                <button key={tab} onClick={() => setActiveTab(tab === 'map' ? 'controls' : 'leaderboard')} className={`tab ${(tab === 'map' && activeTab === 'controls') || activeTab === tab ? 'active' : ''}`} style={{flex:1,textAlign:'center'}}>{label}</button>
+                <button key={tab} onClick={() => setActiveTab(tab === 'map' ? 'controls' : tab)} className={`tab ${(tab === 'map' && activeTab === 'controls') || activeTab === tab ? 'active' : ''}`} style={{flex:1,textAlign:'center'}}>{label}</button>
               ))}
             </div>
 
