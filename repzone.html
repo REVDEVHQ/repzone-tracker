@@ -485,6 +485,7 @@ function RepZoneApp() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [customerNote, setCustomerNote] = useState('');
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [calendarData, setCalendarData] = useState(null);
   const [pendingPinLocation, setPendingPinLocation] = useState(null);
@@ -977,7 +978,7 @@ function RepZoneApp() {
   }, [currentLocation]);
 
 
-  async function dropPinAtLocation(lat, lng, custName, custPhone, custEmail) {
+  async function dropPinAtLocation(lat, lng, custName, custPhone, custEmail, custNote) {
     setSaving(true);
     setGeocoding(true);
 
@@ -1011,8 +1012,12 @@ function RepZoneApp() {
       // Build note with customer info (always save if provided)
       let finalNote = note || null;
       if (custName) {
-        // Format: Name - Email - Phone | additional note
-        finalNote = `${custName}${custEmail ? ' - ' + custEmail : ''}${custPhone ? ' - ' + custPhone : ''}${note ? ' | ' + note : ''}`;
+        // Format: Name - Email - Phone | customer note | pin note
+        let noteParts = `${custName}${custEmail ? ' - ' + custEmail : ''}${custPhone ? ' - ' + custPhone : ''}`;
+        if (custNote || note) {
+          noteParts += ' | ' + [custNote, note].filter(Boolean).join(' | ');
+        }
+        finalNote = noteParts;
       }
 
       const newPin = {
@@ -1708,6 +1713,139 @@ function RepZoneApp() {
       )}
 
       {activeTab === 'leaderboard' && <LeaderboardView />}
+
+      {activeTab === 'crm' && (
+        <div style={{padding:'1rem',height:'100%',overflow:'auto'}}>
+          <h3 style={{fontSize:'1.125rem',fontWeight:'700',marginBottom:'1rem',color:'#1e293b'}}>📋 My Leads</h3>
+          
+          {pins
+            .filter(p => currentUser && p.team_member_id === currentUser.id)
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .map(pin => {
+              // Extract customer info
+              let customerInfo = null;
+              let displayNote = '';
+              if (pin.note && pin.note.includes(' - ') && pin.note.includes('@')) {
+                const parts = pin.note.split(' | ');
+                const custPart = parts[0];
+                displayNote = parts[1] || '';
+                const custDetails = custPart.split(' - ');
+                if (custDetails.length >= 2) {
+                  customerInfo = {
+                    name: custDetails[0],
+                    email: custDetails[1],
+                    phone: custDetails[2] || null
+                  };
+                }
+              }
+              
+              if (!customerInfo) return null;
+              
+              const leadType = LEAD_TYPES[pin.status] || LEAD_TYPES.knocked;
+              
+              return (
+                <div key={pin.id} style={{
+                  background:'white',
+                  borderRadius:'0.75rem',
+                  padding:'1rem',
+                  marginBottom:'0.75rem',
+                  boxShadow:'0 2px 6px rgba(0,0,0,0.06)',
+                  border:`2px solid ${leadType.color}20`
+                }}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'start',marginBottom:'0.75rem'}}>
+                    <div>
+                      <h4 style={{fontSize:'1rem',fontWeight:'bold',color:'#1e293b',marginBottom:'0.25rem'}}>{customerInfo.name}</h4>
+                      <div style={{display:'flex',alignItems:'center',gap:'0.375rem'}}>
+                        <span style={{fontSize:'1.125rem'}}>{leadType.icon}</span>
+                        <span style={{fontSize:'0.75rem',fontWeight:'600',color:leadType.color,background:`${leadType.color}15`,padding:'0.25rem 0.5rem',borderRadius:'0.375rem'}}>{leadType.label}</span>
+                      </div>
+                    </div>
+                    <span style={{fontSize:'0.625rem',color:'#94a3b8',whiteSpace:'nowrap'}}>{new Date(pin.created_at).toLocaleDateString()}</span>
+                  </div>
+                  
+                  {customerInfo.phone && (
+                    <div style={{display:'flex',alignItems:'center',gap:'0.375rem',marginBottom:'0.375rem'}}>
+                      <span style={{fontSize:'1rem'}}>📞</span>
+                      <a href={`tel:${customerInfo.phone}`} style={{color:'#3b82f6',fontWeight:'600',fontSize:'0.875rem',textDecoration:'none'}}>{customerInfo.phone}</a>
+                    </div>
+                  )}
+                  
+                  {customerInfo.email && (
+                    <div style={{display:'flex',alignItems:'center',gap:'0.375rem',marginBottom:'0.375rem'}}>
+                      <span style={{fontSize:'1rem'}}>📧</span>
+                      <a href={`mailto:${customerInfo.email}`} style={{color:'#3b82f6',fontWeight:'600',fontSize:'0.875rem',textDecoration:'none',wordBreak:'break-all'}}>{customerInfo.email}</a>
+                    </div>
+                  )}
+                  
+                  {pin.address && (
+                    <div style={{display:'flex',alignItems:'start',gap:'0.375rem',marginBottom:'0.5rem'}}>
+                      <span style={{fontSize:'1rem'}}>📍</span>
+                      <span style={{fontSize:'0.75rem',color:'#64748b',lineHeight:'1.4'}}>{pin.address}</span>
+                    </div>
+                  )}
+                  
+                  {displayNote && (
+                    <div style={{display:'flex',alignItems:'start',gap:'0.375rem',marginBottom:'0.5rem',padding:'0.5rem',background:'#f8fafc',borderRadius:'0.5rem'}}>
+                      <span style={{fontSize:'1rem'}}>📝</span>
+                      <span style={{fontSize:'0.75rem',color:'#64748b',lineHeight:'1.4',fontStyle:'italic'}}>{displayNote}</span>
+                    </div>
+                  )}
+                  
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.5rem',marginTop:'0.75rem'}}>
+                    {customerInfo.phone && (
+                      <a href={`tel:${customerInfo.phone}`} style={{
+                        padding:'0.625rem',
+                        background:'#10b981',
+                        color:'white',
+                        borderRadius:'0.5rem',
+                        textAlign:'center',
+                        fontWeight:'700',
+                        fontSize:'0.75rem',
+                        textDecoration:'none',
+                        display:'flex',
+                        alignItems:'center',
+                        justifyContent:'center',
+                        gap:'0.25rem'
+                      }}>
+                        📞 Call
+                      </a>
+                    )}
+                    {customerInfo.email && (
+                      <a href={`mailto:${customerInfo.email}`} style={{
+                        padding:'0.625rem',
+                        background:'#3b82f6',
+                        color:'white',
+                        borderRadius:'0.5rem',
+                        textAlign:'center',
+                        fontWeight:'700',
+                        fontSize:'0.75rem',
+                        textDecoration:'none',
+                        display:'flex',
+                        alignItems:'center',
+                        justifyContent:'center',
+                        gap:'0.25rem'
+                      }}>
+                        📧 Email
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            }).filter(Boolean)}
+          
+          {pins.filter(p => {
+            if (!currentUser || p.team_member_id !== currentUser.id) return false;
+            if (!p.note || !p.note.includes('@')) return false;
+            return true;
+          }).length === 0 && (
+            <div style={{textAlign:'center',padding:'2rem',color:'#94a3b8'}}>
+              <div style={{fontSize:'3rem',marginBottom:'0.75rem'}}>📋</div>
+              <p style={{fontSize:'1rem',fontWeight:'600',marginBottom:'0.375rem'}}>No Leads Yet</p>
+              <p style={{fontSize:'0.75rem'}}>Drop pins with customer info to see them here</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -1763,14 +1901,25 @@ function RepZoneApp() {
                 style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}
               />
             </div>
+            <div style={{marginBottom:'1.5rem'}}>
+              <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Note <span style={{color:'#64748b',fontWeight:'400'}}>(optional)</span></label>
+              <textarea 
+                value={customerNote}
+                onChange={(e) => setCustomerNote(e.target.value)}
+                placeholder="Gate code, dog in yard, callback time..."
+                rows={2}
+                style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600',resize:'vertical',fontFamily:'-apple-system,sans-serif'}}
+              />
+            </div>
             <button
               onClick={async () => {
                 setShowCustomerForm(false);
-                await dropPinAtLocation(pendingPinLocation.lat, pendingPinLocation.lng, customerName, customerPhone, customerEmail);
+                await dropPinAtLocation(pendingPinLocation.lat, pendingPinLocation.lng, customerName, customerPhone, customerEmail, customerNote);
                 setPendingPinLocation(null);
                 setCustomerName('');
                 setCustomerPhone('');
                 setCustomerEmail('');
+                setCustomerNote('');
               }}
               className="modern-button"
               style={{width:'100%',padding:'1rem',background:'#3b82f6',color:'white',border:'none',borderRadius:'0.75rem',fontSize:'1rem',fontWeight:'700',boxShadow:'0 4px 12px rgba(59,130,246,0.3)'}}
