@@ -512,6 +512,14 @@ function RepZoneApp() {
     }
   }
 
+  function handleModeChange(newMode) {
+    // Reset zone drawing state when changing modes
+    if (mode === "draw-zone" && newMode !== "draw-zone") {
+      setActiveZoneId(null);
+    }
+    setMode(newMode);
+  }
+
   function showToast(message, duration = 4000) {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), duration);
@@ -1158,8 +1166,8 @@ function RepZoneApp() {
     map.on('dblclick', () => {
       if (mode === "draw-zone" && activeZoneId) {
         setActiveZoneId(null);
-        setMode("select");
-        showToast('✅ Zone completed!');
+        handleModeChange("select");
+        showToast('✅ Zone completed! Click "Zone" to draw another.');
       }
     });
 
@@ -1633,7 +1641,7 @@ function RepZoneApp() {
             <label style={{display:'block',fontSize:'0.875rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e293b'}}>🎯 Mode</label>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem'}}>
               {[['drop-pin','📍','Pin'],['draw-zone','✏️','Zone'],['select','👆','Select']].map(([m,icon,label]) => (
-                <button key={m} onClick={()=>setMode(m)} className="modern-button" style={{padding:'1rem 0.5rem',borderRadius:'0.75rem',border:mode===m?'none':'2px solid #e5e7eb',background:mode===m?'#3b82f6':'white',color:mode===m?'white':'#64748b',fontSize:'1.5rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem',boxShadow:mode===m?'0 4px 12px rgba(59,130,246,0.3)':'none'}}>
+                <button key={m} onClick={()=>handleModeChange(m)} className="modern-button" style={{padding:'1rem 0.5rem',borderRadius:'0.75rem',border:mode===m?'none':'2px solid #e5e7eb',background:mode===m?'#3b82f6':'white',color:mode===m?'white':'#64748b',fontSize:'1.5rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem',boxShadow:mode===m?'0 4px 12px rgba(59,130,246,0.3)':'none'}}>
                   <div>{icon}</div>
                   <div style={{fontSize:'0.6875rem',fontWeight:'700'}}>{label}</div>
                 </button>
@@ -2156,7 +2164,7 @@ function RepZoneApp() {
                     <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e293b'}}>🎯 Mode</label>
                     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.75rem'}}>
                       {[['drop-pin','📍 Pin'],['draw-zone','✏️ Zone'],['select','👆 Select']].map(([m,label]) => (
-                        <button key={m} onClick={()=>setMode(m)} className="modern-button" style={{padding:'1rem 0.75rem',borderRadius:'0.75rem',border:mode===m?'none':'2px solid #e5e7eb',background:mode===m?'#3b82f6':'white',color:mode===m?'white':'#64748b',fontSize:'0.9375rem',fontWeight:'700',boxShadow:mode===m?'0 4px 12px rgba(59,130,246,0.3)':'none'}}>{label}</button>
+                        <button key={m} onClick={()=>handleModeChange(m)} className="modern-button" style={{padding:'1rem 0.75rem',borderRadius:'0.75rem',border:mode===m?'none':'2px solid #e5e7eb',background:mode===m?'#3b82f6':'white',color:mode===m?'white':'#64748b',fontSize:'0.9375rem',fontWeight:'700',boxShadow:mode===m?'0 4px 12px rgba(59,130,246,0.3)':'none'}}>{label}</button>
                       ))}
                     </div>
                     {mode === "draw-zone" && currentUser?.role !== 'admin' && (
