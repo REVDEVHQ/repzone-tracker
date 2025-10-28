@@ -196,6 +196,36 @@
   ::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
   }
+
+  
+  .zone-debug-banner {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fef3c7;
+    border: 2px solid #f59e0b;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    font-weight: 600;
+    color: #92400e;
+    max-width: 90%;
+    text-align: center;
+  }
+  
+  .zone-debug-banner button {
+    margin-left: 1rem;
+    background: #f59e0b;
+    color: white;
+    border: none;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
 </style>
 </head>
 <body>
@@ -225,6 +255,47 @@ const LEAD_TYPES = {
 };
 
 const GPS_MAX_AGE_MS = 30000;
+
+// ============================================
+// 🛡️ ZONE PROTECTION & BACKUP SYSTEM
+// ============================================
+const ZONE_BACKUP_KEY = 'repzone_assigned_zones_backup';
+const ZONE_HISTORY_KEY = 'repzone_zone_history';
+
+const backupZones = (zones) => {
+  try {
+    const backupData = { zones, timestamp: new Date().toISOString(), count: zones.length };
+    localStorage.setItem(ZONE_BACKUP_KEY, JSON.stringify(backupData));
+    console.log('✅ Zones backed up:', zones.length, 'zones');
+    const history = JSON.parse(localStorage.getItem(ZONE_HISTORY_KEY) || '[]');
+    history.unshift(backupData);
+    localStorage.setItem(ZONE_HISTORY_KEY, JSON.stringify(history.slice(0, 10)));
+  } catch (e) { console.error('❌ Backup failed:', e); }
+};
+
+const restoreZonesFromBackup = () => {
+  try {
+    const backup = localStorage.getItem(ZONE_BACKUP_KEY);
+    if (backup) {
+      const data = JSON.parse(backup);
+      console.log('📦 Found backup:', data.count, 'zones from', data.timestamp);
+      return data.zones;
+    }
+  } catch (e) { console.error('❌ Restore failed:', e); }
+  return null;
+};
+
+const detectZoneDeletion = (oldCount, newCount) => {
+  if (oldCount === 0) return { deleted: false };
+  const percentChange = ((oldCount - newCount) / oldCount) * 100;
+  if (newCount === 0 && oldCount > 0) {
+    return { deleted: true, severity: 'critical', message: `⚠️ ALL ${oldCount} zones disappeared!` };
+  } else if (percentChange > 50) {
+    return { deleted: true, severity: 'warning', message: `⚠️ Zones dropped: ${oldCount} → ${newCount}` };
+  }
+  return { deleted: false };
+};
+
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
@@ -490,6 +561,11 @@ function RepZoneApp() {
   const [calendarData, setCalendarData] = useState(null);
   const [pendingPinLocation, setPendingPinLocation] = useState(null);
   const [fdMode, setFdMode] = useState(false);
+  const [assignedZones, setAssignedZones] = useState([]);
+  const [showZoneDebug, setShowZoneDebug] = useState(false);
+  const [zoneDebugInfo, setZoneDebugInfo] = useState('');
+  const [previousZoneCount, setPreviousZoneCount] = useState(0);
+
   
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -668,15 +744,45 @@ function RepZoneApp() {
 
   async function loadData() {
     try {
-      const [pinsRes, zonesRes, teamRes] = await Promise.all([
+      const [pinsRes, zonesRes, teamRes, assignedZonesRes] = await Promise.all([
         supabase.current.from('pins').select('*'),
         supabase.current.from('zones').select('*'),
-        supabase.current.from('team_members').select('*')
+        supabase.current.from('team_members').select('*'),
+        supabase.current.from('assigned_zones').select('*').is('deleted_at', null)
       ]);
       setPins(pinsRes.data || []);
       setZones(zonesRes.data || []);
       setTeamMembers(teamRes.data || []);
-    } catch (e) {}
+      
+      // 🛡️ ZONE PROTECTION
+      const newZones = assignedZonesRes.data || [];
+      console.log('✅ Fetched zones:', newZones.length);
+      const deletion = detectZoneDeletion(previousZoneCount, newZones.length);
+      
+      if (deletion.deleted && deletion.severity === 'critical') {
+        const backup = restoreZonesFromBackup();
+        if (backup?.length > 0) {
+          setZoneDebugInfo(deletion.message + ` Backup: ${backup.length} zones`);
+          setShowZoneDebug(true);
+          if (confirm(`CRITICAL: Zones disappeared! Restore ${backup.length} from backup?`)) {
+            await restoreZonesToDatabase(backup);
+            return;
+          }
+          setAssignedZones(backup);
+          setPreviousZoneCount(backup.length);
+          return;
+        }
+      } else if (deletion.deleted) {
+        setZoneDebugInfo(deletion.message);
+        setShowZoneDebug(true);
+      }
+      
+      setAssignedZones(newZones);
+      if (newZones.length > 0) {
+        setPreviousZoneCount(newZones.length);
+        backupZones(newZones);
+      }
+    } catch (e) { console.error('Load error:', e); }
     setLoading(false);
   }
 
@@ -789,6 +895,38 @@ function RepZoneApp() {
       showToast('✅ Zone unassigned!');
     } catch (e) {
       showToast('❌ Error unassigning zone: ' + e.message);
+    }
+  }
+
+
+
+  async function restoreZonesToDatabase(zones) {
+    try {
+      showToast('Restoring zones...');
+      const { error } = await supabase.current.from('assigned_zones').insert(
+        zones.map(z => ({ team_member_id: z.team_member_id, bounds: z.bounds, name: z.name, color: z.color }))
+      );
+      if (error) throw error;
+      showToast('✅ Zones restored!');
+      setShowZoneDebug(false);
+      loadData();
+    } catch (e) {
+      console.error('Restore error:', e);
+      showToast('❌ Restore failed');
+    }
+  }
+
+  async function deleteAssignedZone(zoneId) {
+    const zone = assignedZones.find(z => z.id === zoneId);
+    if (!zone || !confirm(`⚠️ DELETE ZONE "${zone.name}"? Cannot be undone!`)) return;
+    try {
+      const { error } = await supabase.current.from('assigned_zones')
+        .update({ deleted_at: new Date().toISOString() }).eq('id', zoneId);
+      if (error) throw error;
+      showToast(`Zone "${zone.name}" deleted`);
+      loadData();
+    } catch (e) {
+      showToast('Delete failed');
     }
   }
 
