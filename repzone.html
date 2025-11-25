@@ -188,14 +188,19 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   window.initGoogleMaps = function() {
-    console.log('✅ Google Maps loaded');
+    console.log('✅ Google Maps loaded successfully');
     window.googleMapsReady = true;
     if (window.startRepZoneApp) {
       window.startRepZoneApp();
     }
   };
+  
+  window.gm_authFailure = function() {
+    console.error('❌ Google Maps API authentication failed');
+    alert('Google Maps API Error: Please check your API key configuration.\n\n1. Go to Google Cloud Console\n2. Enable the Maps JavaScript API\n3. Add your domain to API key restrictions\n4. Current domain: ' + window.location.hostname);
+  };
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyALxYqoe16YGS8s9wVO64jiKuI3hpkcvI0&libraries=places,geometry&callback=initGoogleMaps&loading=async"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxqGzPnCxZNpH3Xopsk4VnwZOxVLjSQWc&libraries=places,geometry&callback=initGoogleMaps&loading=async" onerror="alert('Failed to load Google Maps. Check your internet connection and API key.')"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
