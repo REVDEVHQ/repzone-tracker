@@ -479,8 +479,6 @@ function RepZoneApp() {
   const [selectedZone, setSelectedZone] = useState(null);
   const [activeZoneId, setActiveZoneId] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [newUserName, setNewUserName] = useState("");
-  const [newUserRole, setNewUserRole] = useState("rep");
   const [leaderboardPeriod, setLeaderboardPeriod] = useState('week');
   const [filter, setFilter] = useState({ status: "all", userId: "all" });
   const [drawingZone, setDrawingZone] = useState(false);
@@ -544,33 +542,44 @@ function RepZoneApp() {
 
   const initializeApp = async () => {
     try {
-      let userId = localStorage.getItem('repzone_user_id');
+      console.log('Initializing app...');
       
       // Load team members first
       await loadTeamMembers();
       
+      let userId = localStorage.getItem('repzone_user_id');
+      
       if (!userId) {
         // Show user selection modal instead of prompt
+        console.log('No user ID found, showing modal');
         setLoading(false);
         setShowUserModal(true);
         return;
       }
       
-      const { data: user } = await supabase.current
+      console.log('Found user ID:', userId);
+      const { data: user, error } = await supabase.current
         .from('team_members')
         .select('*')
         .eq('id', userId)
         .single();
         
+      if (error) {
+        console.error('Error loading user:', error);
+      }
+        
       if (user) {
+        console.log('Loaded user:', user);
         setCurrentUser(user);
       } else {
+        console.log('User not found, clearing localStorage');
         localStorage.removeItem('repzone_user_id');
         setLoading(false);
         setShowUserModal(true);
         return;
       }
       
+      console.log('Loading additional data...');
       await Promise.all([
         loadPins(),
         loadZones(),
@@ -580,6 +589,7 @@ function RepZoneApp() {
       setLoading(false);
       
       if (window.googleMapsReady) {
+        console.log('Google Maps ready, initializing...');
         initializeMap();
       }
     } catch (error) {
@@ -627,8 +637,23 @@ function RepZoneApp() {
   };
 
   const loadTeamMembers = async () => {
-    const { data } = await supabase.current.from('team_members').select('*');
-    if (data) setTeamMembers(data);
+    try {
+      const { data, error } = await supabase.current
+        .from('team_members')
+        .select('*')
+        .order('name', { ascending: true });
+      
+      if (error) {
+        console.error('Error loading team members:', error);
+        showToast('Error loading team members');
+        return;
+      }
+      
+      console.log('Loaded team members:', data);
+      if (data) setTeamMembers(data);
+    } catch (error) {
+      console.error('Exception loading team members:', error);
+    }
   };
 
   const loadPins = async () => {
@@ -1469,62 +1494,60 @@ function RepZoneApp() {
               {currentUser ? 'Switch User' : 'Select Your Account'}
             </h2>
             
-            {teamMembers.length > 0 ? (
-              <>
-                <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '1rem' }}>
-                  {teamMembers.map(member => (
-                    <div
-                      key={member.id}
-                      className="leaderboard-item"
-                      style={{ cursor: 'pointer' }}
-                      onClick={async () => {
-                        localStorage.setItem('repzone_user_id', member.id);
-                        setCurrentUser(member);
-                        setShowUserModal(false);
-                        
-                        // Load data and initialize map
-                        await Promise.all([
-                          loadPins(),
-                          loadZones(),
-                          loadLiveLocations()
-                        ]);
-                        
-                        if (window.googleMapsReady && mapRef.current && !mapReady) {
-                          initializeMap();
-                        }
-                      }}
-                    >
-                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '700', fontSize: '1.125rem' }}>
-                        {member.name[0].toUpperCase()}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '600', color: 'white', fontSize: '1rem' }}>{member.name}</div>
-                        <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
-                          {member.email || member.phone || member.role?.toUpperCase() || 'REP'}
-                        </div>
-                      </div>
-                      {currentUser?.id === member.id && (
-                        <div style={{ color: '#10b981', fontWeight: '600', fontSize: '0.875rem' }}>✓</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                
-                {currentUser && (
-                  <button
-                    className="btn btn-secondary"
-                    style={{ width: '100%' }}
-                    onClick={() => setShowUserModal(false)}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👥</div>
-                <p>No team members found. Create one below.</p>
+            {teamMembers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
+                <p>Loading team members...</p>
               </div>
+            ) : (
+              <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                {teamMembers.map(member => (
+                  <div
+                    key={member.id}
+                    className="leaderboard-item"
+                    style={{ cursor: 'pointer' }}
+                    onClick={async () => {
+                      localStorage.setItem('repzone_user_id', member.id);
+                      setCurrentUser(member);
+                      setShowUserModal(false);
+                      
+                      // Load data and initialize map
+                      await Promise.all([
+                        loadPins(),
+                        loadZones(),
+                        loadLiveLocations()
+                      ]);
+                      
+                      if (window.googleMapsReady && mapRef.current && !mapReady) {
+                        initializeMap();
+                      }
+                    }}
+                  >
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '700', fontSize: '1.25rem' }}>
+                      {member.name[0].toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '600', color: 'white', fontSize: '1.0625rem' }}>{member.name}</div>
+                      <div style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>
+                        {member.email}
+                      </div>
+                    </div>
+                    {currentUser?.id === member.id && (
+                      <div style={{ color: '#10b981', fontWeight: '700', fontSize: '1.25rem' }}>✓</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {currentUser && teamMembers.length > 0 && (
+              <button
+                className="btn btn-secondary"
+                style={{ width: '100%', marginTop: '1.5rem' }}
+                onClick={() => setShowUserModal(false)}
+              >
+                Cancel
+              </button>
             )}
           </div>
         </div>
