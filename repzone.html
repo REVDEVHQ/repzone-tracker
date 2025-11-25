@@ -9,57 +9,279 @@
 <script src="https://sea.refinedpainting.co/js/form_embed.js" type="text/javascript"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; width: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif; }
+  html, body { height: 100%; width: 100%; overflow: hidden; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   #map { height: 100% !important; width: 100% !important; }
   
   .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-  @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
-  @keyframes progress { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-  @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideIn { from { transform: translateX(-400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes shimmer { 0% { background-position: -1000px 0; } 100% { background-position: 1000px 0; } }
   
   .tracking-indicator { animation: pulse 2s infinite; }
-  .tab { padding: 0.875rem 1.25rem; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600; transition: all 0.3s; font-size: 0.9375rem; }
-  .tab.active { border-bottom-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
-  .tab:hover { background: #f1f5f9; }
-  .toast { position: fixed; top: 5rem; right: 1rem; background: white; padding: 1rem 1.5rem; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 10001; animation: slideIn 0.3s ease; max-width: 400px; border-left: 4px solid #3b82f6; }
   
-  .stat-card {
-    background: white;
-    border-radius: 1rem;
-    padding: 1.25rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    transition: all 0.3s;
-    border: 1px solid #e5e7eb;
+  .sidebar {
+    width: 420px;
+    height: 100vh;
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+    position: fixed;
+    left: 0;
+    top: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 1000;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.3);
+    transition: transform 0.3s ease;
   }
   
-  .stat-card:hover {
-    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  .sidebar::-webkit-scrollbar { width: 8px; }
+  .sidebar::-webkit-scrollbar-track { background: #1e293b; }
+  .sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  
+  .sidebar-content {
+    padding: 1.5rem;
+  }
+  
+  .tab-nav {
+    display: flex;
+    gap: 0.5rem;
+    background: rgba(15, 23, 42, 0.5);
+    padding: 0.5rem;
+    border-radius: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .tab {
+    flex: 1;
+    padding: 0.75rem;
+    text-align: center;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #94a3b8;
+    transition: all 0.2s;
+  }
+  
+  .tab.active {
+    background: #3b82f6;
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  }
+  
+  .tab:hover:not(.active) {
+    background: rgba(59, 130, 246, 0.1);
+    color: #cbd5e1;
+  }
+  
+  .card {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s;
+  }
+  
+  .card:hover {
+    background: rgba(255, 255, 255, 0.12);
     transform: translateY(-2px);
   }
   
-  .modern-button {
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  
+  .stat-card {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 0.875rem;
+    padding: 1rem;
+    text-align: center;
     transition: all 0.2s;
+  }
+  
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(59, 130, 246, 0.2);
+  }
+  
+  .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+  
+  .stat-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .lead-type-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  
+  .lead-type-btn {
+    padding: 1.5rem 1rem;
+    border-radius: 0.875rem;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    font-weight: 600;
+  }
+  
+  .lead-type-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+  }
+  
+  .lead-type-btn.active {
+    border-color: white;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.2);
+  }
+  
+  .lead-type-btn .emoji {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  
+  .lead-type-btn .label {
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+  
+  .btn {
+    padding: 0.875rem 1.5rem;
+    border-radius: 0.75rem;
+    border: none;
     font-weight: 600;
     cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9375rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
   }
   
-  .modern-button:hover {
+  .btn-primary {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  }
+  
+  .btn-primary:hover {
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
   
-  .modern-button:active {
-    transform: translateY(0);
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
   }
   
-  .loading-shimmer {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 1000px 100%;
-    animation: shimmer 2s infinite;
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  
+  .input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+    color: white;
+    font-size: 0.9375rem;
+    transition: all 0.2s;
+  }
+  
+  .input::placeholder {
+    color: #64748b;
+  }
+  
+  .input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  
+  .toast {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: white;
+    padding: 1rem 1.5rem;
+    border-radius: 1rem;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    z-index: 10001;
+    animation: slideIn 0.3s ease;
+    max-width: 400px;
+    border-left: 4px solid #3b82f6;
+  }
+  
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: fadeIn 0.2s;
+    padding: 1rem;
+  }
+  
+  .modal-content {
+    background: #1e293b;
+    border-radius: 1.5rem;
+    padding: 2rem;
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    animation: slideUp 0.3s;
+  }
+  
+  .user-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .user-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: white;
   }
   
   .hamburger-btn {
@@ -79,11 +301,6 @@
     align-items: center;
     justify-content: center;
     gap: 5px;
-    transition: all 0.3s;
-  }
-  
-  .hamburger-btn:hover {
-    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
   }
   
   .hamburger-btn span {
@@ -103,202 +320,141 @@
   }
   
   .hamburger-btn.open span:nth-child(3) {
-    transform: rotate(-45deg) translate(6px, -6px);
+    transform: rotate(-45deg) translate(8px, -8px);
   }
   
-  .mobile-dropdown {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: white;
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.4s ease;
-    z-index: 1001;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  .zone-item {
+    padding: 0.875rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
   }
   
-  .mobile-dropdown.open {
-    max-height: 85vh;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+  .zone-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(4px);
   }
   
-  .desktop-sidebar {
+  .zone-item.active {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.2);
+  }
+  
+  .leaderboard-item {
     display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    margin-bottom: 0.5rem;
+    transition: all 0.2s;
   }
+  
+  .leaderboard-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(4px);
+  }
+  
+  .rank-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.875rem;
+  }
+  
+  .rank-1 { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+  .rank-2 { background: linear-gradient(135deg, #94a3b8, #64748b); }
+  .rank-3 { background: linear-gradient(135deg, #fb923c, #f97316); }
   
   @media (max-width: 768px) {
+    .sidebar {
+      width: 100%;
+      transform: translateX(-100%);
+    }
+    
+    .sidebar.open {
+      transform: translateX(0);
+    }
+    
     .hamburger-btn {
       display: flex;
     }
     
-    .mobile-dropdown {
-      display: block;
-    }
-    
-    .desktop-sidebar {
-      display: none !important;
-    }
-    
-    .toast {
-      left: 1rem;
-      right: 1rem;
-      top: 1rem;
+    #map {
+      width: 100% !important;
+      margin-left: 0 !important;
     }
   }
   
   @media (min-width: 769px) {
-    .hamburger-btn {
-      display: none !important;
+    #map {
+      margin-left: 420px;
+      width: calc(100% - 420px) !important;
     }
-    
-    .mobile-dropdown {
-      display: none !important;
-    }
-    
-    .desktop-sidebar {
-      display: flex !important;
-    }
-  }
-  
-  ::-webkit-scrollbar {
-    width: 8px;
-  }
-  
-  ::-webkit-scrollbar-track {
-    background: #f1f5f9;
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
   }
 </style>
 </head>
 <body>
+<button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileMenu()">
+  <span></span>
+  <span></span>
+  <span></span>
+</button>
+
 <div id="root"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-  window.initGoogleMaps = function() {
-    console.log('✅ Google Maps loaded successfully');
-    window.googleMapsReady = true;
-    if (window.startRepZoneApp) {
-      window.startRepZoneApp();
-    }
-  };
-  
-  window.gm_authFailure = function() {
-    console.error('❌ Google Maps API authentication failed');
-    alert('Google Maps API Error: Please check your API key configuration.\n\n1. Go to Google Cloud Console\n2. Enable the Maps JavaScript API\n3. Add your domain to API key restrictions\n4. Current domain: ' + window.location.hostname);
-  };
-</script>
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxqGzPnCxZNpH3Xopsk4VnwZOxVLjSQWc&libraries=places,geometry&callback=initGoogleMaps&loading=async" onerror="alert('Failed to load Google Maps. Check your internet connection and API key.')"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxqGzPnCxZNpH3Xopsk4VnwZOxVLjSQWc&libraries=places&callback=initGoogleMaps" async defer></script>
+
+<script>
+window.gm_authFailure = function() {
+  alert('Google Maps authentication failed. Please check API key configuration.');
+  console.error('Google Maps Auth Error');
+};
+
+window.initGoogleMaps = function() {
+  console.log('Google Maps loaded successfully');
+  window.googleMapsReady = true;
+  if (window.startRepZoneApp) {
+    window.startRepZoneApp();
+  }
+};
+
+window.toggleMobileMenu = function() {
+  const sidebar = document.querySelector('.sidebar');
+  const hamburger = document.getElementById('hamburgerBtn');
+  if (sidebar && hamburger) {
+    sidebar.classList.toggle('open');
+    hamburger.classList.toggle('open');
+  }
+};
+</script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
 const SUPABASE_URL = 'https://cytikhfyygkovnjtpsth.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5dGlraGZ5eWdrb3ZuanRwc3RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA3MTc3NzYsImV4cCI6MjA3NjI5Mzc3Nn0.ItJObIXo_Ks8TEigj5RkUA4vXbze_3FMMIzYyVHrthQ';
-
-const COLORS = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
-
-const LEAD_TYPES = {
-  estimate: { icon: '💰', label: 'A - Estimate', color: '#10b981', display: 'A' },
-  callback: { icon: '📞', label: 'B - Callback 1-2 Weeks', color: '#f59e0b', display: 'B' },
-  notinterested: { icon: '📋', label: 'C - Not Interested (Has Info)', color: '#64748b', display: 'C' },
-  flyer: { icon: '📬', label: 'FD - Flyer Drop', color: '#3b82f6', display: 'FD' },
-  knocked: { icon: '✅', label: 'Knocked', color: '#16a34a', display: '✅' },
-  skipped: { icon: '⏭️', label: 'Skipped', color: '#ef4444', display: '⏭️' }
-};
-
-const GPS_MAX_AGE_MS = 30000;
-
-const GHL_CONFIG = {
-  apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2NhdGlvbl9pZCI6ImVuMmQ4Q2FxR0Q4YTNTRU1WRkhaIiwidmVyc2lvbiI6MSwiaWF0IjoxNzUyODYxNDIyMzU2LCJzdWIiOiJuMGFvVnBNQlJ1TjRKSGJEUWJXeiJ9.AZc26Y3MqBK8SUdc8PyufVwrUsrS7kac1mnAhFJDlHA',
-  locationId: 'en2d8CaqGD8a3SEMVFHz',
-  calendarUrls: {
-    onsite: 'https://sea.refinedpainting.co/widget/bookings/onsiteestimates',
-    general: 'https://sea.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8'
-  }
-};
-
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3;
-  const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
-  const Δφ = (lat2 - lat1) * Math.PI / 180, Δλ = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c * 3.28084;
-}
-
-function getVerificationStatus(distance) {
-  if (distance <= 50) return { status: 'verified', color: '#10b981', icon: '✅', label: 'Verified' };
-  if (distance <= 150) return { status: 'questionable', color: '#f59e0b', icon: '⚠️', label: 'Questionable' };
-  return { status: 'suspicious', color: '#ef4444', icon: '🚫', label: 'Suspicious' };
-}
-
-function isGPSFresh(location) {
-  if (!location || !location.timestamp) return false;
-  return (Date.now() - location.timestamp) < GPS_MAX_AGE_MS;
-}
-
-function getGPSAge(location) {
-  if (!location || !location.timestamp) return null;
-  return Math.floor((Date.now() - location.timestamp) / 1000);
-}
-
-async function sendContactToGHL(contactData) {
-  try {
-    const response = await fetch('https://rest.gohighlevel.com/v1/contacts/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GHL_CONFIG.apiKey}`,
-        'Content-Type': 'application/json',
-        'Version': '2021-07-28'
-      },
-      body: JSON.stringify({
-        locationId: GHL_CONFIG.locationId,
-        firstName: contactData.name?.split(' ')[0] || contactData.name,
-        lastName: contactData.name?.split(' ').slice(1).join(' ') || '',
-        name: contactData.name,
-        email: contactData.email || '',
-        phone: contactData.phone || '',
-        address1: contactData.address || '',
-        tags: ['Door-to-Door', contactData.leadType || 'Unknown', contactData.verified ? 'GPS-Verified' : 'Unverified'],
-        source: 'RepZone App',
-        customField: {
-          rep_name: contactData.repName,
-          lead_type: contactData.leadType,
-          gps_distance: contactData.distance,
-          pin_created_at: contactData.createdAt
-        }
-      })
-    });
-    if (!response.ok) throw new Error(`GHL API error: ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    console.error('❌ GHL error:', error);
-    throw error;
-  }
-}
-
-function openGHLCalendar(customerName, customerEmail, customerPhone, address) {
-  window.showCalendarModal({ name: customerName || '', email: customerEmail || '', phone: customerPhone || '', address: address || '' });
-}
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5dGlraGZ5eWdrb3ZuanRwc3RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQxMDc4NjYsImV4cCI6MjA0OTY4Mzg2Nn0.zrL0IqJ7rVwDbfipSFqHdKJKBpqZSJjlL5eX4IVhWJQ';
+const GHL_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2NhdGlvbl9pZCI6ImVuMmQ4Q2FxR0Q4YTNTRUNNSEY4eiIsImNvbXBhbnlfaWQiOiJPY3JQM2ljTW5tcTlXSkxLRkhvTSIsInZlcnNpb24iOjEsImlhdCI6MTczNDg0NjI5NDUzOCwic3ViIjoiSGZ5Y045M1RsN3VHckFQZ2l2MjQifQ.m7c5fHpJldhJLwp14cA0XOmRNgEbnGJy5ufQxCiujRA';
+const GHL_LOCATION_ID = 'en2d8CaqGD8a3SEMVFHz';
+const GHL_CALENDAR_URL = 'https://sea.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8';
+const ADMIN_USER_IDS = ['user-1760858671762', 'user-1760855853315'];
 
 function RepZoneApp() {
   const [pins, setPins] = useState([]);
+  const [zones, setZones] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const [liveLocations, setLiveLocations] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -306,14 +462,13 @@ function RepZoneApp() {
   const [mode, setMode] = useState("drop-pin");
   const [status, setStatus] = useState("estimate");
   const [note, setNote] = useState("");
-  const [activeTab, setActiveTab] = useState("map");
+  const [activeTab, setActiveTab] = useState("controls");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -324,6 +479,15 @@ function RepZoneApp() {
   const [calendarData, setCalendarData] = useState(null);
   const [pendingPinLocation, setPendingPinLocation] = useState(null);
   const [fdMode, setFdMode] = useState(false);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const [activeZoneId, setActiveZoneId] = useState(null);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserRole, setNewUserRole] = useState("rep");
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState('week');
+  const [filter, setFilter] = useState({ status: "all", userId: "all" });
+  const [drawingZone, setDrawingZone] = useState(false);
+  const [zonePoints, setZonePoints] = useState([]);
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -333,699 +497,997 @@ function RepZoneApp() {
   const markersRef = useRef([]);
   const userMarkerRef = useRef(null);
   const searchBoxRef = useRef(null);
+  const zonePolygonsRef = useRef([]);
+  const drawingPolygonRef = useRef(null);
 
-  function showToast(message, duration = 4000) {
-    setToastMessage(message);
-    setTimeout(() => setToastMessage(null), duration);
-  }
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const LEAD_TYPES = {
+    estimate: { emoji: '💰', label: 'Estimate (A)', color: '#10b981', value: 'estimate' },
+    callback: { emoji: '📞', label: 'Callback (B)', color: '#f59e0b', value: 'callback' },
+    not_interested: { emoji: '📋', label: 'Not Int (C)', color: '#64748b', value: 'not_interested' },
+    flyer_drop: { emoji: '🏘️', label: 'Flyer (FD)', color: '#3b82f6', value: 'flyer_drop' }
+  };
 
   useEffect(() => {
     supabase.current = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    loadData();
     
-    const saved = localStorage.getItem('current_user_id');
-    if (saved) {
-      try {
-        const user = JSON.parse(saved);
-        setCurrentUser(user);
-        requestLocationPermission(user);
-      } catch (e) {
-        console.error('Error parsing saved user:', e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!supabase.current) return;
-    loadLiveLocations();
-    const interval = setInterval(loadLiveLocations, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function loadLiveLocations() {
-    try {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      const { data, error } = await supabase.current.from('live_locations').select('*').gte('last_updated', fiveMinutesAgo).eq('is_active', true);
-      if (!error && data) setLiveLocations(data);
-    } catch (e) {
-      console.error('Error loading live locations:', e);
-    }
-  }
-
-  function requestLocationPermission(user) {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      () => startLocationTracking(user),
-      (error) => console.error('GPS permission error:', error)
-    );
-  }
-
-  function startLocationTracking(user) {
-    if (!user || locationWatchId.current) return;
-    setTrackingEnabled(true);
-    locationWatchId.current = navigator.geolocation.watchPosition(
-      (position) => {
-        setCurrentLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: Date.now()
-        });
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
-    );
-    locationUpdateInterval.current = setInterval(() => {
-      if (currentLocation && user) updateLiveLocation(user.id, currentLocation);
-    }, 30000);
-  }
-
-  function stopLocationTracking() {
-    if (locationWatchId.current) {
-      navigator.geolocation.clearWatch(locationWatchId.current);
-      locationWatchId.current = null;
-    }
-    if (locationUpdateInterval.current) {
-      clearInterval(locationUpdateInterval.current);
-      locationUpdateInterval.current = null;
-    }
-    setTrackingEnabled(false);
-    if (currentUser) updateLiveLocationInactive(currentUser.id);
-  }
-
-  async function updateLiveLocation(userId, location) {
-    try {
-      await supabase.current.from('live_locations').upsert({
-        team_member_id: userId,
-        lat: location.lat,
-        lng: location.lng,
-        accuracy: location.accuracy,
-        last_updated: new Date().toISOString(),
-        is_active: true
-      }, { onConflict: 'team_member_id' });
-      loadLiveLocations();
-    } catch (e) {}
-  }
-
-  async function updateLiveLocationInactive(userId) {
-    try {
-      await supabase.current.from('live_locations').update({ is_active: false }).eq('team_member_id', userId);
-    } catch (e) {}
-  }
-
-  useEffect(() => {
-    if (currentLocation && currentUser && trackingEnabled) {
-      updateLiveLocation(currentUser.id, currentLocation);
-    }
-  }, [currentLocation, currentUser, trackingEnabled]);
-
-  useEffect(() => () => stopLocationTracking(), []);
-
-  async function loadData() {
-    try {
-      const [pinsRes, teamRes] = await Promise.all([
-        supabase.current.from('pins').select('*'),
-        supabase.current.from('team_members').select('*')
-      ]);
-      setPins(pinsRes.data || []);
-      setTeamMembers(teamRes.data || []);
-    } catch (e) {
-      console.error('Load error:', e);
-    }
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current || loading) return;
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
     
-    const waitForGoogle = () => {
-      if (window.google && window.google.maps) {
-        initMap();
-      } else {
-        setTimeout(waitForGoogle, 100);
-      }
+    initializeApp();
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (locationWatchId.current) navigator.geolocation.clearWatch(locationWatchId.current);
+      if (locationUpdateInterval.current) clearInterval(locationUpdateInterval.current);
     };
-    
-    window.startRepZoneApp = waitForGoogle;
-    if (window.googleMapsReady) {
-      waitForGoogle();
+  }, []);
+
+  useEffect(() => {
+    if (mapReady && mapInstanceRef.current) {
+      updateMarkers();
+      updateZones();
     }
-  }, [loading]);
+  }, [pins, zones, mapReady, filter]);
 
-  function initMap() {
-    if (!mapRef.current || mapInstanceRef.current || !window.google) return;
+  const initializeApp = async () => {
+    let userId = localStorage.getItem('repzone_user_id');
+    
+    if (!userId) {
+      userId = `user-${Date.now()}`;
+      localStorage.setItem('repzone_user_id', userId);
+      
+      const userName = prompt('Enter your name:');
+      if (!userName) {
+        showToast('Name required to continue');
+        return;
+      }
+      
+      const { data: newUser, error } = await supabase.current
+        .from('team_members')
+        .insert([{
+          id: userId,
+          name: userName,
+          role: 'rep',
+          color: getRandomColor()
+        }])
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Error creating user:', error);
+        showToast('Error creating user');
+        return;
+      }
+      
+      setCurrentUser(newUser);
+    } else {
+      const { data: user } = await supabase.current
+        .from('team_members')
+        .select('*')
+        .eq('id', userId)
+        .single();
+        
+      if (user) {
+        setCurrentUser(user);
+      } else {
+        localStorage.removeItem('repzone_user_id');
+        initializeApp();
+        return;
+      }
+    }
+    
+    await Promise.all([
+      loadTeamMembers(),
+      loadPins(),
+      loadZones(),
+      loadLiveLocations()
+    ]);
+    
+    if (window.googleMapsReady) {
+      initializeMap();
+    } else {
+      window.startRepZoneApp = initializeMap;
+    }
+    
+    setLoading(false);
+  };
 
-    const map = new google.maps.Map(mapRef.current, {
+  const initializeMap = () => {
+    if (!mapRef.current || !window.google) return;
+    
+    const map = new window.google.maps.Map(mapRef.current, {
       center: { lat: 47.6062, lng: -122.3321 },
       zoom: isMobile ? 12 : 13,
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      zoomControl: true,
-      styles: [{ featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }]
+      styles: [
+        { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
+      ]
     });
-
+    
     mapInstanceRef.current = map;
-
-    if (currentLocation) {
-      map.setCenter({ lat: currentLocation.lat, lng: currentLocation.lng });
-      map.setZoom(16);
-    } else if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          map.setCenter({ lat: position.coords.latitude, lng: position.coords.longitude });
-          map.setZoom(16);
-        },
-        () => {}
-      );
-    }
-
+    
     map.addListener('click', (e) => {
-      if (mode === "drop-pin" && currentUser) {
-        if (!currentLocation) {
-          showToast('⚠️ Enable GPS tracking first!');
-          return;
-        }
-
-        if (!isGPSFresh(currentLocation)) {
-          const age = getGPSAge(currentLocation);
-          showToast(`⚠️ GPS data is ${age}s old! Move around to get fresh GPS signal.`, 6000);
-          return;
-        }
-
-        if (fdMode) {
-          dropPinAtLocation(e.latLng.lat(), e.latLng.lng(), '', '', '', '');
-        } else {
-          setPendingPinLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-          setShowCustomerForm(true);
-        }
+      if (drawingZone) {
+        addZonePoint(e.latLng.lat(), e.latLng.lng());
+      } else if (mode === 'drop-pin') {
+        handleMapClick(e.latLng.lat(), e.latLng.lng());
       }
     });
+    
+    setMapReady(true);
+    startLocationTracking();
+  };
 
-    if (searchBoxRef.current) {
-      const searchBox = new google.maps.places.SearchBox(searchBoxRef.current);
-      map.addListener('bounds_changed', () => searchBox.setBounds(map.getBounds()));
-      searchBox.addListener('places_changed', () => {
-        const places = searchBox.getPlaces();
-        if (places.length === 0) return;
-        const place = places[0];
-        if (!place.geometry || !place.geometry.location) return;
-        map.setCenter(place.geometry.location);
-        map.setZoom(17);
-      });
-    }
+  const loadTeamMembers = async () => {
+    const { data } = await supabase.current.from('team_members').select('*');
+    if (data) setTeamMembers(data);
+  };
 
-    setTimeout(() => {
-      map.setCenter(map.getCenter());
-      setMapReady(true);
-    }, 300);
-  }
+  const loadPins = async () => {
+    const { data } = await supabase.current
+      .from('pins')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (data) setPins(data);
+  };
 
-  async function dropPinAtLocation(lat, lng, custName, custPhone, custEmail, custNote) {
-    setSaving(true);
-    setGeocoding(true);
+  const loadZones = async () => {
+    const { data } = await supabase.current.from('zones').select('*');
+    if (data) setZones(data);
+  };
 
-    try {
-      const geocoder = new google.maps.Geocoder();
-      const result = await new Promise((resolve) => {
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-          if (status === 'OK' && results[0]) {
-            resolve(results[0].formatted_address);
-          } else {
-            resolve(null);
-          }
-        });
-      });
+  const loadLiveLocations = async () => {
+    const { data } = await supabase.current
+      .from('live_locations')
+      .select('*')
+      .eq('is_active', true);
+    if (data) setLiveLocations(data);
+  };
 
-      const address = result;
-      const shortAddress = result ? result.split(',')[0] : 'Location';
+  const startLocationTracking = () => {
+    if (!navigator.geolocation) return;
+    
+    setTrackingEnabled(true);
+    
+    locationWatchId.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const location = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        };
+        setCurrentLocation(location);
+        updateUserMarker(location);
+      },
+      (error) => console.error('Location error:', error),
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+    );
+    
+    locationUpdateInterval.current = setInterval(updateLiveLocation, 30000);
+  };
 
-      if (address) {
-        showToast(`📍 Found: ${shortAddress}`, 3000);
-      } else {
-        showToast('⚠️ No address found - saving location anyway', 3000);
-      }
-
-      const distance = calculateDistance(currentLocation.lat, currentLocation.lng, lat, lng);
-      const verification = getVerificationStatus(distance);
-
-      let finalNote = note || null;
-      if (custName) {
-        let noteParts = `${custName}${custEmail ? ' - ' + custEmail : ''}${custPhone ? ' - ' + custPhone : ''}`;
-        if (custNote || note) {
-          noteParts += ' | ' + [custNote, note].filter(Boolean).join(' | ');
-        }
-        finalNote = noteParts;
-      }
-
-      const newPin = {
-        id: `pin-${Date.now()}`,
-        lat,
-        lng,
-        status,
-        address,
-        rep_name: currentUser.name,
+  const updateLiveLocation = async () => {
+    if (!currentLocation || !currentUser) return;
+    
+    await supabase.current
+      .from('live_locations')
+      .upsert({
         team_member_id: currentUser.id,
-        note: finalNote,
-        actual_lat: currentLocation.lat,
-        actual_lng: currentLocation.lng,
-        distance_from_pin: Math.round(distance),
-        verification_status: verification.status,
-        created_at: new Date().toISOString()
-      };
+        lat: currentLocation.lat,
+        lng: currentLocation.lng,
+        accuracy: currentLocation.accuracy,
+        last_updated: new Date().toISOString(),
+        is_active: true
+      });
+      
+    loadLiveLocations();
+  };
 
-      const { error } = await supabase.current.from('pins').insert([newPin]).select();
-
-      if (error) {
-        showToast('❌ Error saving pin: ' + error.message);
-      } else {
-        setPins(prev => [...prev, newPin]);
-        setNote("");
-        const leadTypeLabel = LEAD_TYPES[status]?.label || status;
-        const custInfo = custName ? ` for ${custName}` : '';
-
-        if (custName && (custEmail || custPhone)) {
-          try {
-            await sendContactToGHL({
-              name: custName,
-              email: custEmail,
-              phone: custPhone,
-              address,
-              leadType: leadTypeLabel,
-              repName: currentUser.name,
-              verified: verification.status === 'verified',
-              distance: Math.round(distance),
-              createdAt: newPin.created_at
-            });
-            showToast('✅ Contact added to GHL!', 3000);
-          } catch (ghlError) {
-            console.error('GHL sync failed:', ghlError);
-            showToast('⚠️ Pin saved but GHL sync failed', 3000);
-          }
-        }
-
-        if (verification.status === 'verified') {
-          showToast(`✅ ${leadTypeLabel}${custInfo} at ${shortAddress}! (${Math.round(distance)}ft)`, 5000);
-        } else if (verification.status === 'suspicious') {
-          showToast(`⚠️ ${leadTypeLabel}${custInfo} saved but ${Math.round(distance)}ft away - marked suspicious`, 5000);
-        } else {
-          showToast(`⚠️ ${leadTypeLabel}${custInfo} saved (${Math.round(distance)}ft - questionable)`, 5000);
-        }
-
-        addMarkerToMap(newPin);
-      }
-    } catch (error) {
-      showToast('❌ Error: ' + error.message);
-    }
-
-    setSaving(false);
-    setGeocoding(false);
-  }
-
-  function addMarkerToMap(pin) {
+  const updateUserMarker = (location) => {
     if (!mapInstanceRef.current) return;
-
-    const leadType = LEAD_TYPES[pin.status] || LEAD_TYPES.knocked;
-    const user = teamMembers.find(u => u.id === pin.team_member_id);
-    const verification = pin.verification_status ? getVerificationStatus(pin.distance_from_pin || 0) : null;
-
-    const marker = new google.maps.Marker({
-      position: { lat: pin.lat, lng: pin.lng },
+    
+    if (userMarkerRef.current) {
+      userMarkerRef.current.setMap(null);
+    }
+    
+    const marker = new window.google.maps.Marker({
+      position: { lat: location.lat, lng: location.lng },
       map: mapInstanceRef.current,
       icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 12,
-        fillColor: user?.color || '#64748b',
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: currentUser?.color || '#3b82f6',
         fillOpacity: 1,
-        strokeColor: verification ? verification.color : 'white',
-        strokeWeight: 4
+        strokeColor: 'white',
+        strokeWeight: 3
       },
-      title: pin.id
+      title: 'You'
     });
-
-    let customerInfo = null;
-    let displayNote = pin.note || '';
-    if (pin.note && pin.note.includes(' - ') && pin.note.includes('@')) {
-      const parts = pin.note.split(' | ');
-      const custPart = parts[0];
-      displayNote = parts[1] || '';
-      const custDetails = custPart.split(' - ');
-      if (custDetails.length >= 2) {
-        customerInfo = {
-          name: custDetails[0],
-          email: custDetails[1],
-          phone: custDetails[2] || null
-        };
-      }
-    }
-
-    const infoWindow = new google.maps.InfoWindow({
-      content: `<div style="min-width:240px;padding:0;font-family:-apple-system,sans-serif;border-radius:12px;overflow:hidden"><div style="background:linear-gradient(135deg, ${leadType.color} 0%, ${leadType.color}dd 100%);padding:16px;color:white"><div style="font-size:24px;margin-bottom:4px">${leadType.icon}</div><div style="font-size:18px;font-weight:700">${leadType.label}${customerInfo ? ` - ${customerInfo.name}` : ''}</div></div><div style="padding:16px;background:white">${pin.address ? `<div style="padding:12px;background:#f8fafc;border-left:4px solid #64748b;margin-bottom:12px;border-radius:6px"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">📍 ADDRESS</div><div style="font-weight:600;color:#1e293b;font-size:13px;line-height:1.5;margin-bottom:8px">${pin.address}</div>${customerInfo ? `<div style="border-top:1px solid #e2e8f0;padding-top:8px;margin-top:8px">${customerInfo.email ? `<div style="color:#3b82f6;font-size:13px;margin-bottom:4px;display:flex;align-items:center;gap:6px"><span>📧</span><span>${customerInfo.email}</span></div>` : ''}${customerInfo.phone ? `<div style="color:#3b82f6;font-size:13px;display:flex;align-items:center;gap:6px"><span>📞</span><span>${customerInfo.phone}</span></div>` : ''}</div>` : ''}</div>` : ''}<div style="padding:10px;background:${user?.color || '#64748b'}15;border-left:4px solid ${user?.color || '#64748b'};margin-bottom:12px;border-radius:6px"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:4px">👤 REP</div><div style="font-weight:700;color:${user?.color || '#64748b'};font-size:14px">${pin.rep_name || 'Unknown'}</div></div>${displayNote ? `<div style="padding:10px;background:#f8fafc;border-left:4px solid #64748b;margin-bottom:12px;border-radius:6px"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:4px">📝 NOTE</div><div style="color:#1e293b;font-size:13px">${displayNote}</div></div>` : ''}${verification ? `<div style="padding:12px;background:${verification.color}15;border-left:4px solid ${verification.color};margin-bottom:12px;border-radius:6px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="font-size:24px">${verification.icon}</span><div><div style="font-weight:700;color:${verification.color};font-size:15px">${verification.label}</div><div style="font-size:13px;color:#64748b;margin-top:2px">Distance: <b>${pin.distance_from_pin} feet</b></div></div></div></div>` : ''}<div style="font-size:12px;color:#94a3b8;margin-bottom:14px;text-align:center">${new Date(pin.created_at).toLocaleString()}</div>${customerInfo ? `<button onclick="window.openGHLCalendarGlobal('${customerInfo.name}','${customerInfo.email || ''}','${customerInfo.phone || ''}','${pin.address || ''}')" class="modern-button" style="width:100%;padding:12px;background:#10b981;color:white;border:none;border-radius:10px;font-weight:700;font-size:14px;margin-bottom:8px;box-shadow:0 2px 8px rgba(16,185,129,0.3)">📅 Book Appointment</button>` : ''}<button onclick="window.deletePinGlobal('${pin.id}')" class="modern-button" style="width:100%;padding:12px;background:#ef4444;color:white;border:none;border-radius:10px;font-weight:700;font-size:14px;box-shadow:0 2px 8px rgba(239,68,68,0.3)">🗑️ Delete Pin</button></div></div>`,
-      maxWidth: 280
-    });
-
-    marker.addListener('click', () => infoWindow.open(mapInstanceRef.current, marker));
-    markersRef.current.push({ marker, pinId: pin.id });
-  }
-
-  useEffect(() => {
-    if (!mapInstanceRef.current || pins.length === 0 || !mapReady) return;
-
-    markersRef.current.forEach(({ marker }) => marker.setMap(null));
-    markersRef.current = [];
-
-    pins.forEach(pin => addMarkerToMap(pin));
-  }, [pins, teamMembers, mapReady]);
-
-  useEffect(() => {
-    if (!mapInstanceRef.current || !currentLocation) return;
-
-    if (userMarkerRef.current) userMarkerRef.current.setMap(null);
-
-    const userIcon = {
-      path: google.maps.SymbolPath.CIRCLE,
-      scale: 15,
-      fillColor: currentUser?.color || '#3b82f6',
-      fillOpacity: 1,
-      strokeColor: '#ffffff',
-      strokeWeight: 5
-    };
-
-    userMarkerRef.current = new google.maps.Marker({
-      position: { lat: currentLocation.lat, lng: currentLocation.lng },
+    
+    const circle = new window.google.maps.Circle({
       map: mapInstanceRef.current,
-      icon: userIcon,
-      title: 'You are here'
-    });
-
-    new google.maps.Circle({
-      map: mapInstanceRef.current,
-      center: { lat: currentLocation.lat, lng: currentLocation.lng },
-      radius: currentLocation.accuracy || 50,
+      center: { lat: location.lat, lng: location.lng },
+      radius: location.accuracy,
       fillColor: currentUser?.color || '#3b82f6',
-      fillOpacity: 0.2,
+      fillOpacity: 0.1,
       strokeColor: currentUser?.color || '#3b82f6',
-      strokeOpacity: 0.5,
-      strokeWeight: 2
+      strokeOpacity: 0.3,
+      strokeWeight: 1
     });
-  }, [currentLocation, currentUser, mapReady]);
+    
+    userMarkerRef.current = { marker, circle };
+  };
 
-  window.deletePinGlobal = async (pinId) => {
-    if (!confirm('Delete this pin?')) return;
+  const handleMapClick = async (lat, lng) => {
+    if (fdMode) {
+      await dropPin(lat, lng, '', 'flyer_drop');
+      return;
+    }
+    
+    setPendingPinLocation({ lat, lng });
+    setShowCustomerForm(true);
+  };
+
+  const dropPin = async (lat, lng, address, leadType) => {
+    if (!currentUser || !currentLocation) {
+      showToast('Location required');
+      return;
+    }
+    
+    setSaving(true);
+    
     try {
-      await supabase.current.from('pins').delete().eq('id', pinId);
-      setPins(prev => prev.filter(p => p.id !== pinId));
-      showToast('✅ Pin deleted!');
-      const markerObj = markersRef.current.find(m => m.pinId === pinId);
-      if (markerObj) {
-        markerObj.marker.setMap(null);
-        markersRef.current = markersRef.current.filter(m => m.pinId !== pinId);
+      const distance = calculateDistance(
+        currentLocation.lat,
+        currentLocation.lng,
+        lat,
+        lng
+      );
+      
+      let verificationStatus = 'verified';
+      if (distance > 50 && distance <= 150) verificationStatus = 'questionable';
+      else if (distance > 150) verificationStatus = 'suspicious';
+      
+      const pinData = {
+        lat,
+        lng,
+        status: leadType,
+        address: address || await geocodeLocation(lat, lng) || 'Address not found',
+        rep_name: currentUser.name,
+        team_member_id: currentUser.id,
+        note,
+        actual_lat: currentLocation.lat,
+        actual_lng: currentLocation.lng,
+        distance_from_pin: distance,
+        verification_status: verificationStatus,
+        created_at: new Date().toISOString()
+      };
+      
+      const { data: newPin, error } = await supabase.current
+        .from('pins')
+        .insert([pinData])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      if (leadType !== 'flyer_drop' && leadType !== 'not_interested') {
+        await createGHLContact({
+          name: customerName,
+          email: customerEmail,
+          phone: customerPhone,
+          address: pinData.address,
+          leadType,
+          distance
+        });
       }
-    } catch (e) {
-      showToast('❌ Error deleting pin');
+      
+      loadPins();
+      resetForm();
+      showToast(`${LEAD_TYPES[leadType].label} dropped!`);
+      
+    } catch (error) {
+      console.error('Error dropping pin:', error);
+      showToast('Error dropping pin');
+    } finally {
+      setSaving(false);
     }
   };
 
-  window.openGHLCalendarGlobal = openGHLCalendar;
-  window.showCalendarModal = (data) => {
-    setCalendarData(data);
-    setShowCalendarModal(true);
+  const createGHLContact = async (data) => {
+    try {
+      const response = await fetch(`https://services.leadconnectorhq.com/contacts/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GHL_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28'
+        },
+        body: JSON.stringify({
+          locationId: GHL_LOCATION_ID,
+          firstName: data.name.split(' ')[0],
+          lastName: data.name.split(' ').slice(1).join(' ') || '',
+          email: data.email,
+          phone: data.phone,
+          address1: data.address,
+          tags: ['Door-to-Door', LEAD_TYPES[data.leadType].label, `GPS-${data.distance <= 50 ? 'Verified' : 'Unverified'}`],
+          customFields: [
+            { key: 'rep_name', value: currentUser.name },
+            { key: 'lead_type', value: data.leadType },
+            { key: 'gps_distance', value: data.distance.toFixed(1) }
+          ]
+        })
+      });
+      
+      if (data.leadType === 'estimate') {
+        setCalendarData({ name: data.name, email: data.email, phone: data.phone });
+        setShowCalendarModal(true);
+      }
+      
+    } catch (error) {
+      console.error('GHL Error:', error);
+    }
   };
 
-  function selectCurrentUser(user) {
-    setCurrentUser(user);
-    localStorage.setItem('current_user_id', JSON.stringify(user));
-    requestLocationPermission(user);
-  }
-
-  const stats = {
-    totalPins: currentUser ? pins.filter(p => p.team_member_id === currentUser.id).length : 0,
-    estimates: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.status === 'estimate').length : 0,
-    callbacks: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.status === 'callback').length : 0,
-    verified: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.verification_status === 'verified').length : 0,
-    suspicious: currentUser ? pins.filter(p => p.team_member_id === currentUser.id && p.verification_status === 'suspicious').length : 0
+  const geocodeLocation = async (lat, lng) => {
+    setGeocoding(true);
+    try {
+      const geocoder = new window.google.maps.Geocoder();
+      const result = await new Promise((resolve) => {
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          resolve(status === 'OK' && results[0] ? results[0].formatted_address : null);
+        });
+      });
+      return result;
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      return null;
+    } finally {
+      setGeocoding(false);
+    }
   };
 
-  const gpsAge = currentLocation ? getGPSAge(currentLocation) : null;
-  const gpsIsFresh = currentLocation ? isGPSFresh(currentLocation) : false;
+  const updateMarkers = () => {
+    if (!mapInstanceRef.current) return;
+    
+    markersRef.current.forEach(m => m.setMap(null));
+    markersRef.current = [];
+    
+    const filteredPins = pins.filter(pin => {
+      if (filter.status !== 'all' && pin.status !== filter.status) return false;
+      if (filter.userId !== 'all' && pin.team_member_id !== filter.userId) return false;
+      return true;
+    });
+    
+    filteredPins.forEach(pin => {
+      const user = teamMembers.find(u => u.id === pin.team_member_id);
+      const leadType = LEAD_TYPES[pin.status];
+      
+      let strokeColor = 'white';
+      if (pin.verification_status === 'verified') strokeColor = '#10b981';
+      else if (pin.verification_status === 'questionable') strokeColor = '#f59e0b';
+      else if (pin.verification_status === 'suspicious') strokeColor = '#ef4444';
+      
+      const marker = new window.google.maps.Marker({
+        position: { lat: pin.lat, lng: pin.lng },
+        map: mapInstanceRef.current,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: leadType?.color || user?.color || '#64748b',
+          fillOpacity: 1,
+          strokeColor,
+          strokeWeight: 4
+        },
+        title: `${leadType?.label || pin.status} - ${user?.name || 'Unknown'}`
+      });
+      
+      const infoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 0.5rem; color: #1e293b;">
+            <strong style="color: ${leadType?.color};">${leadType?.label || pin.status}</strong><br/>
+            <strong>${user?.name || 'Unknown'}</strong><br/>
+            ${pin.address || 'No address'}<br/>
+            ${pin.note ? `<em>${pin.note}</em><br/>` : ''}
+            <small>Distance: ${pin.distance_from_pin?.toFixed(1) || '0'}ft (${pin.verification_status})</small><br/>
+            <small>${new Date(pin.created_at).toLocaleString()}</small>
+          </div>
+        `
+      });
+      
+      marker.addListener('click', () => infoWindow.open(mapInstanceRef.current, marker));
+      markersRef.current.push(marker);
+    });
+  };
+
+  const updateZones = () => {
+    if (!mapInstanceRef.current) return;
+    
+    zonePolygonsRef.current.forEach(p => p.setMap(null));
+    zonePolygonsRef.current = [];
+    
+    zones.forEach(zone => {
+      if (!zone.points || zone.points.length < 3) return;
+      
+      const polygon = new window.google.maps.Polygon({
+        paths: zone.points,
+        map: mapInstanceRef.current,
+        fillColor: zone.color,
+        fillOpacity: 0.2,
+        strokeColor: zone.color,
+        strokeWeight: 2,
+        clickable: true
+      });
+      
+      polygon.addListener('click', () => {
+        setActiveZoneId(zone.id);
+        const bounds = new window.google.maps.LatLngBounds();
+        zone.points.forEach(p => bounds.extend(p));
+        mapInstanceRef.current.fitBounds(bounds);
+      });
+      
+      zonePolygonsRef.current.push(polygon);
+    });
+  };
+
+  const startDrawingZone = () => {
+    setDrawingZone(true);
+    setZonePoints([]);
+    showToast('Click on map to draw zone');
+  };
+
+  const addZonePoint = (lat, lng) => {
+    const newPoints = [...zonePoints, { lat, lng }];
+    setZonePoints(newPoints);
+    
+    if (drawingPolygonRef.current) {
+      drawingPolygonRef.current.setMap(null);
+    }
+    
+    if (newPoints.length > 1) {
+      drawingPolygonRef.current = new window.google.maps.Polygon({
+        paths: newPoints,
+        map: mapInstanceRef.current,
+        fillColor: '#3b82f6',
+        fillOpacity: 0.2,
+        strokeColor: '#3b82f6',
+        strokeWeight: 2
+      });
+    }
+  };
+
+  const finishDrawingZone = async () => {
+    if (zonePoints.length < 3) {
+      showToast('Need at least 3 points');
+      return;
+    }
+    
+    const zoneName = prompt('Enter zone name:');
+    if (!zoneName) return;
+    
+    const { error } = await supabase.current
+      .from('zones')
+      .insert([{
+        name: zoneName,
+        color: getRandomColor(),
+        points: zonePoints,
+        created_by: currentUser.id
+      }]);
+      
+    if (error) {
+      console.error('Error creating zone:', error);
+      showToast('Error creating zone');
+    } else {
+      showToast('Zone created!');
+      loadZones();
+    }
+    
+    cancelDrawingZone();
+  };
+
+  const cancelDrawingZone = () => {
+    setDrawingZone(false);
+    setZonePoints([]);
+    if (drawingPolygonRef.current) {
+      drawingPolygonRef.current.setMap(null);
+      drawingPolygonRef.current = null;
+    }
+  };
+
+  const deleteZone = async (zoneId) => {
+    if (!confirm('Delete this zone?')) return;
+    
+    const { error } = await supabase.current
+      .from('zones')
+      .delete()
+      .eq('id', zoneId);
+      
+    if (error) {
+      showToast('Error deleting zone');
+    } else {
+      showToast('Zone deleted');
+      loadZones();
+    }
+  };
+
+  const getStats = () => {
+    const userPins = pins.filter(p => p.team_member_id === currentUser?.id);
+    return {
+      estimates: userPins.filter(p => p.status === 'estimate').length,
+      callbacks: userPins.filter(p => p.status === 'callback').length,
+      notInterested: userPins.filter(p => p.status === 'not_interested').length,
+      flyers: userPins.filter(p => p.status === 'flyer_drop').length,
+      total: userPins.length
+    };
+  };
+
+  const getLeaderboard = () => {
+    const now = new Date();
+    let startDate;
+    
+    if (leaderboardPeriod === 'day') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (leaderboardPeriod === 'week') {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 7);
+    } else {
+      startDate = new Date(0);
+    }
+    
+    const filteredPins = pins.filter(p => new Date(p.created_at) >= startDate);
+    
+    const stats = teamMembers.map(member => {
+      const memberPins = filteredPins.filter(p => p.team_member_id === member.id);
+      return {
+        ...member,
+        d2d: memberPins.filter(p => p.status !== 'flyer_drop').length,
+        flyers: memberPins.filter(p => p.status === 'flyer_drop').length,
+        total: memberPins.length
+      };
+    });
+    
+    return stats.sort((a, b) => b.total - a.total);
+  };
+
+  const resetForm = () => {
+    setCustomerName('');
+    setCustomerEmail('');
+    setCustomerPhone('');
+    setCustomerNote('');
+    setNote('');
+    setShowCustomerForm(false);
+    setPendingPinLocation(null);
+  };
+
+  const showToast = (message) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 20902231;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const getRandomColor = () => {
+    const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  const isAdmin = ADMIN_USER_IDS.includes(currentUser?.id);
+  const stats = getStats();
+  const leaderboard = getLeaderboard();
 
   if (loading) {
     return (
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:'1.5rem',background:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}>
-        <div style={{fontSize:'5rem',animation:'bounce 1s infinite'}}>🏠</div>
-        <div>
-          <h1 style={{color:'white',fontSize:'2.5rem',fontWeight:'bold',marginBottom:'0.5rem',textAlign:'center'}}>RepZone Pro</h1>
-          <p style={{color:'rgba(255,255,255,0.9)',fontSize:'1.125rem',textAlign:'center'}}>Loading your workspace...</p>
-        </div>
-        <div style={{width:'200px',height:'4px',background:'rgba(255,255,255,0.2)',borderRadius:'2px',overflow:'hidden'}}>
-          <div style={{width:'100%',height:'100%',background:'white',animation:'progress 1.5s ease-in-out infinite'}}></div>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a' }}>
+        <div className="spinner"></div>
       </div>
     );
   }
 
-  const MobileDropdownContent = () => (
-    <div style={{padding:'1rem',paddingTop:'5rem'}}>
-      {currentUser && (
-        <div style={{marginBottom:'1rem',padding:'1rem',background:`${currentUser.color}15`,borderRadius:'1rem',border:`2px solid ${currentUser.color}`,display:'flex',alignItems:'center',gap:'0.75rem'}}>
-          <div style={{width:'48px',height:'48px',borderRadius:'50%',background:currentUser.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.25rem',boxShadow:'0 2px 8px rgba(0,0,0,0.15)'}}>
-            {currentUser.name.charAt(0)}
-          </div>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:'700',fontSize:'0.9375rem'}}>{currentUser.name}</div>
-            <div style={{fontSize:'0.6875rem',color:'#64748b',fontWeight:'600'}}>{currentUser.role}</div>
-          </div>
-          <button onClick={() => setCurrentUser(null)} className="modern-button" style={{padding:'0.5rem 0.875rem',fontSize:'0.75rem',background:'white',border:'1px solid #e2e8f0',borderRadius:'0.5rem',fontWeight:'700'}}>Switch</button>
-        </div>
-      )}
-
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'12px',marginBottom:'24px'}}>
-        <div className="stat-card" style={{padding:'16px',textAlign:'center',background:'linear-gradient(135deg, #10b981 0%, #059669 100%)',color:'white'}}>
-          <div style={{fontSize:'32px',fontWeight:'bold'}}>{stats.estimates}</div>
-          <div style={{fontSize:'14px',marginTop:'4px'}}>Estimates</div>
-        </div>
-        <div className="stat-card" style={{padding:'16px',textAlign:'center',background:'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',color:'white'}}>
-          <div style={{fontSize:'32px',fontWeight:'bold'}}>{stats.callbacks}</div>
-          <div style={{fontSize:'14px',marginTop:'4px'}}>Callbacks</div>
-        </div>
-      </div>
-
-      <div className="stat-card" style={{marginBottom:'1rem',background:trackingEnabled?'#dcfce7':'#fee2e2',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.5rem'}}>
-          <b style={{fontSize:'0.875rem',fontWeight:'700'}}>📍 GPS Tracking</b>
-          <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} className="modern-button" style={{padding:'0.5rem 1rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.5rem',fontWeight:'700',fontSize:'0.75rem',boxShadow:`0 2px 8px ${trackingEnabled?'rgba(239,68,68,0.3)':'rgba(16,185,129,0.3)'}`}}>{trackingEnabled ? 'Stop' : 'Start'}</button>
-        </div>
-        <p style={{fontSize:'0.75rem',color:'#64748b',fontWeight:'600'}}>
-          {trackingEnabled ? (gpsAge !== null ? `Active - ${gpsAge}s old ${gpsIsFresh ? '✅' : '⚠️ Stale'}` : 'Active') : 'Enable to verify'}
-        </p>
-      </div>
-
-      <div style={{marginBottom:'1rem'}}>
-        <label style={{display:'block',fontSize:'0.875rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e293b'}}>🔍 Search Address</label>
-        <input ref={searchBoxRef} type="text" placeholder="Search for a place..." style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.875rem',fontWeight:'600'}}/>
-      </div>
-
-      <div style={{marginBottom:'1rem'}}>
-        <label style={{display:'block',fontSize:'0.875rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e293b'}}>🎯 Lead Type</label>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.5rem'}}>
-          {[['estimate','💰','A','#10b981'],['callback','📞','B','#f59e0b'],['notinterested','📋','C','#64748b'],['flyer','📬','FD','#3b82f6']].map(([s,icon,display,color]) => (
-            <button key={s} onClick={()=>{setStatus(s);setFdMode(s === 'flyer');}} className="modern-button" style={{padding:'0.875rem 0.5rem',borderRadius:'0.75rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#64748b',fontSize:'1.5rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.25rem',boxShadow:status===s?`0 4px 12px ${color}50`:'none'}}>
-              <div>{icon}</div>
-              <div style={{fontSize:'0.75rem',fontWeight:'700'}}>{display}</div>
-            </button>
-          ))}
-        </div>
-        {status === 'flyer' && (<p style={{fontSize:'0.75rem',color:'#3b82f6',fontWeight:'700',marginTop:'0.75rem',textAlign:'center'}}>⚡ FD Mode: Pin drops instantly</p>)}
-        <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (optional)" style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.875rem',fontWeight:'600',marginTop:'0.75rem'}}/>
-      </div>
-
-      <button onClick={()=>{setCurrentUser(null);localStorage.removeItem('current_user_id');}} className="btn" style={{width:'100%',padding:'16px',background:'#e5e7eb',border:'none',borderRadius:'12px',fontSize:'16px',fontWeight:'bold'}}>🔄 Switch User</button>
-    </div>
-  );
-
   return (
-    <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#f8fafc'}}>
-      {toastMessage && <div className="toast">{toastMessage}</div>}
-
-      {showCustomerForm && pendingPinLocation && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10003,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1.5rem',padding:'2rem',maxWidth:'440px',width:'100%',boxShadow:'0 20px 40px rgba(0,0,0,0.3)',animation:'fadeIn 0.3s ease'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.5rem'}}>
-              <h3 style={{fontSize:'1.5rem',fontWeight:'bold',color:'#1e293b'}}>📋 Customer Info</h3>
-              <button onClick={() => {setShowCustomerForm(false);setPendingPinLocation(null);setCustomerName('');setCustomerPhone('');setCustomerEmail('');}} className="modern-button" style={{width:'40px',height:'40px',borderRadius:'50%',border:'none',background:'#f1f5f9',fontSize:'1.5rem',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
-            </div>
-            <div style={{marginBottom:'1rem'}}>
-              <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Customer Name</label>
-              <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Enter customer name..." autoFocus style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}/>
-            </div>
-            <div style={{marginBottom:'1rem'}}>
-              <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Email <span style={{color:'#64748b',fontWeight:'400'}}>(optional)</span></label>
-              <input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="customer@email.com" type="email" style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}/>
-            </div>
-            <div style={{marginBottom:'1.5rem'}}>
-              <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Phone <span style={{color:'#64748b',fontWeight:'400'}}>(optional)</span></label>
-              <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="(555) 123-4567" style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}/>
-            </div>
-            <div style={{marginBottom:'1.5rem'}}>
-              <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.5rem',color:'#1e293b'}}>Note <span style={{color:'#64748b',fontWeight:'400'}}>(optional)</span></label>
-              <textarea value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} placeholder="Gate code, dog, etc..." rows={2} style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600',resize:'vertical',fontFamily:'-apple-system,sans-serif'}}/>
-            </div>
-            <button onClick={async () => {setShowCustomerForm(false);await dropPinAtLocation(pendingPinLocation.lat, pendingPinLocation.lng, customerName, customerPhone, customerEmail, customerNote);setPendingPinLocation(null);setCustomerName('');setCustomerPhone('');setCustomerEmail('');setCustomerNote('');}} className="modern-button" style={{width:'100%',padding:'1rem',background:'#3b82f6',color:'white',border:'none',borderRadius:'0.75rem',fontSize:'1rem',fontWeight:'700',boxShadow:'0 4px 12px rgba(59,130,246,0.3)'}}>📍 Drop Pin</button>
+    <>
+      <div className="sidebar">
+        <div className="sidebar-content">
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h1 style={{ fontSize: '1.875rem', fontWeight: '700', color: 'white', marginBottom: '0.25rem' }}>
+              🏠 RepZone Pro
+            </h1>
+            <p style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Door Knocking Tracker</p>
           </div>
-        </div>
-      )}
 
-      {(saving || geocoding) && (
-        <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',padding:'2rem 2.5rem',borderRadius:'1.5rem',boxShadow:'0 20px 40px rgba(0,0,0,0.2)',zIndex:10001,display:'flex',flexDirection:'column',gap:'1rem',alignItems:'center'}}>
-          <div className="spinner" style={{width:'40px',height:'40px',borderWidth:'4px',borderTopColor:'#3b82f6'}}></div>
-          <span style={{fontWeight:'700',fontSize:'1.125rem',color:'#1e293b'}}>{geocoding ? '🏠 Finding Address...' : '💾 Saving...'}</span>
-        </div>
-      )}
-
-      {trackingEnabled && !isMobile && (
-        <div style={{position:'fixed',top:'1rem',right:'1rem',background:gpsIsFresh?'#10b981':'#f59e0b',color:'white',padding:'0.875rem 1.5rem',borderRadius:'2rem',boxShadow:'0 6px 16px rgba(0,0,0,0.2)',zIndex:10001,display:'flex',gap:'0.875rem',alignItems:'center',fontSize:'0.9375rem',fontWeight:'700'}}>
-          <div style={{width:'14px',height:'14px',background:'white',borderRadius:'50%',animation:'pulse 2s infinite'}}></div>
-          <span>GPS {gpsAge !== null ? `${gpsAge}s` : 'Active'} {gpsIsFresh ? '✅' : '⚠️'}</span>
-        </div>
-      )}
-
-      {!currentUser && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10000,padding:'1rem'}}>
-          <div style={{background:'white',borderRadius:'1.5rem',padding:'2rem',maxWidth:'440px',width:'100%',maxHeight:'80vh',overflowY:'auto',boxShadow:'0 20px 40px rgba(0,0,0,0.3)'}}>
-            <h2 style={{fontSize:'1.75rem',fontWeight:'bold',marginBottom:'0.75rem',color:'#1e293b'}}>👋 Select Your Profile</h2>
-            <p style={{color:'#64748b',marginBottom:'1.5rem',fontSize:'0.9375rem',fontWeight:'600'}}>Choose your name to start tracking</p>
-            <div style={{marginBottom:'1rem'}}>
-              {teamMembers.map(member => (
-                <div key={member.id} className="stat-card" style={{marginBottom:'0.75rem',display:'flex',alignItems:'center',gap:'1rem',cursor:'pointer'}} onClick={() => selectCurrentUser(member)}>
-                  <div style={{width:'56px',height:'56px',borderRadius:'50%',background:member.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.5rem',flexShrink:0,boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
-                    {member.name.charAt(0)}
-                  </div>
-                  <div>
-                    <div style={{fontWeight:'700',fontSize:'1.125rem',color:'#1e293b'}}>{member.name}</div>
-                    <div style={{fontSize:'0.8125rem',color:'#64748b',fontWeight:'600'}}>{member.role}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isMobile && (
-        <>
-          <button className={`hamburger-btn ${mobileMenuOpen ? 'open' : ''}`} onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            <span></span>
-            <span></span>
-            <span></span>
-          </button>
-          <div className={`mobile-dropdown ${mobileMenuOpen ? 'open' : ''}`}>
-            <MobileDropdownContent />
-          </div>
-        </>
-      )}
-
-      <div style={{display:'flex',height:'100%',gap:isMobile?0:'1rem',padding:isMobile?0:'1rem'}}>
-        {!isMobile && (
-          <div className="desktop-sidebar" style={{width:'420px',background:'white',borderRadius:'1rem',boxShadow:'0 4px 12px rgba(0,0,0,0.08)',flexDirection:'column',overflow:'hidden',border:'1px solid #e5e7eb'}}>
-            <div style={{padding:'1.75rem',borderBottom:'1px solid #e5e7eb',background:'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'}}>
-              <h1 style={{fontSize:'2rem',fontWeight:'bold',marginBottom:'0.5rem',color:'white',textShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>🏠 RepZone Pro</h1>
-              <p style={{color:'rgba(255,255,255,0.9)',fontSize:'0.875rem',fontWeight:'600'}}>Door Knocking Tracker</p>
-            </div>
-
-            {currentUser && (
-              <div style={{padding:'1.25rem',borderBottom:'1px solid #e5e7eb'}}>
-                <div className="stat-card" style={{background:`${currentUser.color}15`,border:`2px solid ${currentUser.color}`,display:'flex',alignItems:'center',gap:'1rem'}}>
-                  <div style={{width:'56px',height:'56px',borderRadius:'50%',background:currentUser.color,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:'1.5rem',flexShrink:0,boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
-                    {currentUser.name.charAt(0)}
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:'700',fontSize:'1.0625rem',color:'#1e293b'}}>{currentUser.name}</div>
-                    <div style={{fontSize:'0.8125rem',color:'#64748b',fontWeight:'600'}}>{currentUser.role}</div>
-                  </div>
-                  <button onClick={() => setCurrentUser(null)} className="modern-button" style={{padding:'0.625rem 1rem',fontSize:'0.8125rem',background:'white',border:'1px solid #e5e7eb',borderRadius:'0.75rem',fontWeight:'700',boxShadow:'0 2px 4px rgba(0,0,0,0.06)'}}>Switch</button>
+          {currentUser && (
+            <div className="user-badge">
+              <div className="user-avatar" style={{ background: currentUser.color }}>
+                {currentUser.name[0].toUpperCase()}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: '600', color: 'white' }}>{currentUser.name}</div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>
+                  {currentUser.role}
                 </div>
               </div>
-            )}
+              <button 
+                className="btn-secondary" 
+                style={{ padding: '0.5rem 1rem', fontSize: '0.75rem' }}
+                onClick={() => setShowUserModal(true)}
+              >
+                Switch
+              </button>
+            </div>
+          )}
 
-            <div style={{flex:1,overflowY:'auto',padding:'1.25rem'}}>
-              <div className="stat-card" style={{marginBottom:'1.25rem',background:trackingEnabled?'#dcfce7':'#fee2e2',border:`2px solid ${trackingEnabled?'#10b981':'#ef4444'}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem'}}>
-                  <b style={{fontSize:'0.9375rem',fontWeight:'700'}}>📍 GPS Tracking</b>
-                  <button onClick={() => trackingEnabled ? stopLocationTracking() : requestLocationPermission(currentUser)} className="modern-button" style={{padding:'0.625rem 1.25rem',background:trackingEnabled?'#ef4444':'#10b981',color:'white',border:'none',borderRadius:'0.75rem',fontWeight:'700',fontSize:'0.8125rem',boxShadow:`0 2px 8px ${trackingEnabled?'rgba(239,68,68,0.3)':'rgba(16,185,129,0.3)'}`}}>{trackingEnabled ? 'Stop' : 'Start'}</button>
+          <div className="tab-nav">
+            <div className={`tab ${activeTab === 'controls' ? 'active' : ''}`} onClick={() => setActiveTab('controls')}>
+              Controls
+            </div>
+            <div className={`tab ${activeTab === 'zones' ? 'active' : ''}`} onClick={() => setActiveTab('zones')}>
+              Zones
+            </div>
+            <div className={`tab ${activeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setActiveTab('leaderboard')}>
+              Stats
+            </div>
+          </div>
+
+          {activeTab === 'controls' && (
+            <>
+              <div className="card">
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'white', marginBottom: '0.75rem' }}>
+                  🎯 Lead Type
+                </h3>
+                <div className="lead-type-grid">
+                  {Object.values(LEAD_TYPES).map(type => (
+                    <div
+                      key={type.value}
+                      className={`lead-type-btn ${status === type.value ? 'active' : ''}`}
+                      style={{ background: type.color, color: 'white' }}
+                      onClick={() => setStatus(type.value)}
+                    >
+                      <span className="emoji">{type.emoji}</span>
+                      <span className="label">{type.label}</span>
+                    </div>
+                  ))}
                 </div>
-                <p style={{fontSize:'0.8125rem',color:'#64748b',fontWeight:'600'}}>
-                  {trackingEnabled ? (gpsAge !== null ? `✅ Active - GPS is ${gpsAge}s old ${gpsIsFresh ? '(Fresh ✅)' : '(Stale ⚠️)'}` : '✅ Location tracking active') : '⚠️ Enable to verify pin locations'}
-                </p>
+                
+                <input
+                  className="input"
+                  style={{ marginTop: '1rem' }}
+                  placeholder="Note (gate code, dog, etc.)"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+                
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    className="btn btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={() => setFdMode(!fdMode)}
+                  >
+                    {fdMode ? '✅ FD Mode ON' : '🏘️ Enable FD Mode'}
+                  </button>
+                </div>
               </div>
 
-              <div className="stat-card" style={{marginBottom:'1.25rem'}}>
-                <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.875rem',color:'#1e293b'}}>🔍 Search Address</label>
-                <input ref={searchBoxRef} type="text" placeholder="Search for a place..." style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}/>
+              <div className="card">
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'white', marginBottom: '1rem' }}>
+                  📊 Quick Stats
+                </h3>
+                <div className="stat-grid">
+                  <div className="stat-card">
+                    <div className="stat-value" style={{ color: LEAD_TYPES.estimate.color }}>
+                      {stats.estimates}
+                    </div>
+                    <div className="stat-label">Estimates</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-value" style={{ color: LEAD_TYPES.callback.color }}>
+                      {stats.callbacks}
+                    </div>
+                    <div className="stat-label">Callbacks</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-value" style={{ color: LEAD_TYPES.flyer_drop.color }}>
+                      {stats.flyers}
+                    </div>
+                    <div className="stat-label">Flyers</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-value">{stats.total}</div>
+                    <div className="stat-label">Total</div>
+                  </div>
+                </div>
               </div>
 
-              <div className="stat-card" style={{marginBottom:'1.25rem'}}>
-                <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.875rem',color:'#1e293b'}}>🎯 Lead Type</label>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.75rem',marginBottom:'1rem'}}>
-                  {[['estimate','💰','A','#10b981'],['callback','📞','B','#f59e0b'],['notinterested','📋','C','#64748b'],['flyer','📬','FD','#3b82f6']].map(([s,icon,display,color]) => (
-                    <button key={s} onClick={()=>{setStatus(s);setFdMode(s === 'flyer');}} className="modern-button" style={{padding:'1rem',borderRadius:'0.75rem',border:status===s?'none':'2px solid #bfdbfe',background:status===s?color:'white',color:status===s?'white':'#64748b',fontSize:'1.75rem',display:'flex',flexDirection:'column',alignItems:'center',gap:'0.375rem',boxShadow:status===s?`0 4px 12px ${color}50`:'none'}}>
-                      <div>{icon}</div>
-                      <div style={{fontSize:'0.8125rem',fontWeight:'700'}}>{display}</div>
+              <div className="card">
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'white', marginBottom: '0.75rem' }}>
+                  🎮 Controls
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <button
+                    className={`btn ${trackingEnabled ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={startLocationTracking}
+                  >
+                    {trackingEnabled ? '✅ Tracking Active' : '📍 Start Tracking'}
+                  </button>
+                  {currentLocation && (
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
+                      Accuracy: ±{currentLocation.accuracy?.toFixed(0)}ft
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'zones' && (
+            <>
+              <div className="card">
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'white', marginBottom: '1rem' }}>
+                  🗺️ Zone Management
+                </h3>
+                
+                {!drawingZone ? (
+                  <button className="btn btn-primary" style={{ width: '100%' }} onClick={startDrawingZone}>
+                    + Draw New Zone
+                  </button>
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn btn-primary" style={{ flex: 1 }} onClick={finishDrawingZone}>
+                      ✅ Finish ({zonePoints.length} points)
+                    </button>
+                    <button className="btn btn-secondary" onClick={cancelDrawingZone}>
+                      ✖
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="card">
+                <h3 style={{ fontSize: '0.875rem', fontWeight: '600', color: 'white', marginBottom: '0.75rem' }}>
+                  Active Zones ({zones.length})
+                </h3>
+                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {zones.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                      No zones yet. Draw one!
+                    </div>
+                  ) : (
+                    zones.map(zone => (
+                      <div key={zone.id} className={`zone-item ${activeZoneId === zone.id ? 'active' : ''}`}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: zone.color }}></div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9375rem' }}>{zone.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                              {zone.points?.length || 0} points
+                            </div>
+                          </div>
+                          {isAdmin && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); deleteZone(zone.id); }}
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '0.375rem', cursor: 'pointer' }}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'leaderboard' && (
+            <>
+              <div className="card">
+                <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'white', marginBottom: '1rem' }}>
+                  🏆 Leaderboard
+                </h3>
+                
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  {['day', 'week', 'all'].map(period => (
+                    <button
+                      key={period}
+                      className={`btn ${leaderboardPeriod === period ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1, padding: '0.5rem', fontSize: '0.75rem' }}
+                      onClick={() => setLeaderboardPeriod(period)}
+                    >
+                      {period === 'day' ? 'Today' : period === 'week' ? 'Week' : 'All Time'}
                     </button>
                   ))}
                 </div>
-                {status === 'flyer' && (<p style={{fontSize:'0.75rem',color:'#3b82f6',fontWeight:'700',marginBottom:'1rem',textAlign:'center'}}>⚡ FD Mode: Pin drops instantly without customer form</p>)}
-                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (gate code, dog, etc.)" style={{width:'100%',padding:'0.875rem',border:'2px solid #93c5fd',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}/>
-              </div>
 
-              <div className="stat-card">
-                <h3 style={{fontSize:'1.0625rem',fontWeight:'700',marginBottom:'1rem',color:'#1e293b'}}>📊 Quick Stats</h3>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'0.75rem'}}>
-                  {[['💰',stats.estimates,'Estimates','#10b981'],['📞',stats.callbacks,'Callbacks','#f59e0b'],['✅',stats.verified,'Verified','#10b981'],['🚫',stats.suspicious,'Suspicious','#ef4444']].map(([icon,count,label,color]) => (
-                    <div key={label} style={{padding:'1rem',background:`${color}15`,borderRadius:'0.75rem',border:`2px solid ${color}`,textAlign:'center'}}>
-                      <div style={{fontSize:'1.75rem',marginBottom:'0.375rem'}}>{icon}</div>
-                      <div style={{fontSize:'1.75rem',fontWeight:'bold',color:color,marginBottom:'0.25rem'}}>{count}</div>
-                      <div style={{fontSize:'0.75rem',color:'#64748b',fontWeight:'700'}}>{label}</div>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {leaderboard.map((member, idx) => (
+                    <div key={member.id} className="leaderboard-item">
+                      <div className={`rank-badge ${idx < 3 ? `rank-${idx + 1}` : ''}`} style={idx >= 3 ? { background: '#334155', color: '#94a3b8' } : {}}>
+                        {idx + 1}
+                      </div>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '600', fontSize: '0.875rem' }}>
+                        {member.name[0].toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9375rem' }}>{member.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          {member.d2d} D2D • {member.flyers} Flyers
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '1.25rem', fontWeight: '700', color: 'white' }}>{member.total}</div>
+                        <div style={{ fontSize: '0.625rem', color: '#64748b' }}>TOTAL</div>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        <div style={{flex:1,borderRadius:isMobile?0:'1rem',overflow:'hidden',boxShadow:isMobile?'none':'0 4px 12px rgba(0,0,0,0.08)',position:'relative',border:isMobile?'none':'1px solid #e5e7eb'}}>
-          <div ref={mapRef} style={{height:'100%',width:'100%'}} id="map"></div>
+            </>
+          )}
         </div>
       </div>
 
-      {showCalendarModal && calendarData && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10003,padding:'1rem',overflow:'auto'}}>
-          <div style={{background:'white',borderRadius:'1.5rem',width:'100%',maxWidth:'900px',minHeight:'90vh',maxHeight:'95vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',margin:'auto'}}>
-            <div style={{padding:'1.5rem',borderBottom:'2px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg, #10b981 0%, #059669 100%)',flexShrink:0}}>
-              <div>
-                <h2 style={{fontSize:'1.5rem',fontWeight:'bold',color:'white',marginBottom:'0.25rem'}}>📅 Book Appointment</h2>
-                <p style={{fontSize:'0.875rem',color:'rgba(255,255,255,0.9)'}}>{calendarData.name}</p>
+      <div id="map" ref={mapRef}></div>
+
+      {toastMessage && (
+        <div className="toast">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ fontSize: '1.5rem' }}>✅</div>
+            <div style={{ fontWeight: '600', color: '#1e293b' }}>{toastMessage}</div>
+          </div>
+        </div>
+      )}
+
+      {showCustomerForm && (
+        <div className="modal" onClick={() => setShowCustomerForm(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white', marginBottom: '1.5rem' }}>
+              Customer Info
+            </h2>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <input
+                className="input"
+                placeholder="Customer Name *"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+              />
+              <input
+                className="input"
+                type="tel"
+                placeholder="Phone Number *"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+              />
+              <input
+                className="input"
+                type="email"
+                placeholder="Email"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+              />
+              <textarea
+                className="input"
+                placeholder="Additional notes..."
+                value={customerNote}
+                onChange={(e) => setCustomerNote(e.target.value)}
+                rows={3}
+              />
+              
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setShowCustomerForm(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  onClick={async () => {
+                    if (!customerName || !customerPhone) {
+                      showToast('Name and phone required');
+                      return;
+                    }
+                    await dropPin(
+                      pendingPinLocation.lat,
+                      pendingPinLocation.lng,
+                      '',
+                      status
+                    );
+                  }}
+                  disabled={saving || !customerName || !customerPhone}
+                >
+                  {saving ? 'Saving...' : 'Drop Pin'}
+                </button>
               </div>
-              <button onClick={() => setShowCalendarModal(false)} className="modern-button" style={{padding:'0.75rem',background:'rgba(255,255,255,0.2)',border:'none',borderRadius:'0.75rem',color:'white',fontSize:'1.5rem',cursor:'pointer',width:'44px',height:'44px'}}>✕</button>
-            </div>
-            <div style={{flex:1,overflow:'auto',position:'relative',WebkitOverflowScrolling:'touch'}}>
-              <iframe src="https://sea.refinedpainting.co/widget/booking/fIYuXbwwo4XQh3nyLxj8" style={{width:'100%',minHeight:'900px',border:'none',display:'block'}} title="GHL Calendar"/>
             </div>
           </div>
         </div>
       )}
-    </div>
+
+      {showCalendarModal && (
+        <div className="modal" onClick={() => setShowCalendarModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '700px' }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white', marginBottom: '1rem' }}>
+              Book Estimate
+            </h2>
+            <iframe
+              src={GHL_CALENDAR_URL}
+              style={{ width: '100%', height: '600px', border: 'none', borderRadius: '1rem' }}
+            />
+            <button
+              className="btn btn-secondary"
+              style={{ width: '100%', marginTop: '1rem' }}
+              onClick={() => setShowCalendarModal(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showUserModal && (
+        <div className="modal" onClick={() => setShowUserModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white', marginBottom: '1.5rem' }}>
+              Switch User
+            </h2>
+            
+            <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '1.5rem' }}>
+              {teamMembers.map(member => (
+                <div
+                  key={member.id}
+                  className="leaderboard-item"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => {
+                    localStorage.setItem('repzone_user_id', member.id);
+                    window.location.reload();
+                  }}
+                >
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '700' }}>
+                    {member.name[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '600', color: 'white' }}>{member.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>
+                      {member.role}
+                    </div>
+                  </div>
+                  {currentUser?.id === member.id && (
+                    <div style={{ color: '#10b981', fontWeight: '600' }}>✓ Current</div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <button
+              className="btn btn-secondary"
+              style={{ width: '100%' }}
+              onClick={() => setShowUserModal(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
-window.startRepZoneApp = () => {
-  ReactDOM.createRoot(document.getElementById('root')).render(<RepZoneApp />);
+window.startRepZoneApp = function() {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<RepZoneApp />);
 };
 
 if (window.googleMapsReady) {
