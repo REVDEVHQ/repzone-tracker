@@ -425,8 +425,11 @@ window.gm_authFailure = function() {
 };
 
 window.initGoogleMaps = function() {
-  console.log('Google Maps API loaded');
+  console.log('Google Maps loaded successfully');
   window.googleMapsReady = true;
+  if (window.startRepZoneApp) {
+    window.startRepZoneApp();
+  }
 };
 
 window.toggleMobileMenu = function() {
@@ -505,19 +508,10 @@ function RepZoneApp() {
   };
 
   useEffect(() => {
-    console.log('RepZone initializing...');
     supabase.current = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
-    
-    // Set up global callback for Google Maps
-    window.startRepZoneApp = () => {
-      console.log('Google Maps ready, initializing map...');
-      if (mapRef.current && !mapReady) {
-        initializeMap();
-      }
-    };
     
     initializeApp();
     
@@ -535,118 +529,95 @@ function RepZoneApp() {
     }
   }, [pins, zones, mapReady, filter]);
 
-  useEffect(() => {
-    if (!loading && window.googleMapsReady && mapRef.current && !mapReady) {
-      console.log('Loading finished, initializing map now...');
-      initializeMap();
-    }
-  }, [loading]);
-
   const initializeApp = async () => {
-    try {
-      let userId = localStorage.getItem('repzone_user_id');
+    let userId = localStorage.getItem('repzone_user_id');
+    
+    if (!userId) {
+      userId = `user-${Date.now()}`;
+      localStorage.setItem('repzone_user_id', userId);
       
-      if (!userId) {
-        userId = `user-${Date.now()}`;
-        localStorage.setItem('repzone_user_id', userId);
+      const userName = prompt('Enter your name:');
+      if (!userName) {
+        showToast('Name required to continue');
+        return;
+      }
+      
+      const { data: newUser, error } = await supabase.current
+        .from('team_members')
+        .insert([{
+          id: userId,
+          name: userName,
+          role: 'rep',
+          color: getRandomColor()
+        }])
+        .select()
+        .single();
         
-        const userName = prompt('Enter your name:');
-        if (!userName) {
-          showToast('Name required to continue');
-          setLoading(false);
-          return;
-        }
+      if (error) {
+        console.error('Error creating user:', error);
+        showToast('Error creating user');
+        return;
+      }
+      
+      setCurrentUser(newUser);
+    } else {
+      const { data: user } = await supabase.current
+        .from('team_members')
+        .select('*')
+        .eq('id', userId)
+        .single();
         
-        const { data: newUser, error } = await supabase.current
-          .from('team_members')
-          .insert([{
-            id: userId,
-            name: userName,
-            role: 'rep',
-            color: getRandomColor()
-          }])
-          .select()
-          .single();
-          
-        if (error) {
-          console.error('Error creating user:', error);
-          showToast('Error creating user');
-          setLoading(false);
-          return;
-        }
-        
-        setCurrentUser(newUser);
+      if (user) {
+        setCurrentUser(user);
       } else {
-        const { data: user } = await supabase.current
-          .from('team_members')
-          .select('*')
-          .eq('id', userId)
-          .single();
-          
-        if (user) {
-          setCurrentUser(user);
-        } else {
-          localStorage.removeItem('repzone_user_id');
-          setLoading(false);
-          initializeApp();
-          return;
-        }
+        localStorage.removeItem('repzone_user_id');
+        initializeApp();
+        return;
       }
-      
-      await Promise.all([
-        loadTeamMembers(),
-        loadPins(),
-        loadZones(),
-        loadLiveLocations()
-      ]);
-      
-      setLoading(false);
-      
-      if (window.googleMapsReady) {
-        initializeMap();
-      }
-    } catch (error) {
-      console.error('Initialization error:', error);
-      setLoading(false);
-      showToast('Error initializing app');
     }
+    
+    await Promise.all([
+      loadTeamMembers(),
+      loadPins(),
+      loadZones(),
+      loadLiveLocations()
+    ]);
+    
+    if (window.googleMapsReady) {
+      initializeMap();
+    } else {
+      window.startRepZoneApp = initializeMap;
+    }
+    
+    setLoading(false);
   };
 
   const initializeMap = () => {
-    console.log('Initializing map...', { mapRef: !!mapRef.current, google: !!window.google });
-    if (!mapRef.current || !window.google) {
-      console.error('Map ref or Google not ready');
-      return;
-    }
+    if (!mapRef.current || !window.google) return;
     
-    try {
-      const map = new window.google.maps.Map(mapRef.current, {
-        center: { lat: 47.6062, lng: -122.3321 },
-        zoom: isMobile ? 12 : 13,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        styles: [
-          { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
-        ]
-      });
-      
-      mapInstanceRef.current = map;
-      
-      map.addListener('click', (e) => {
-        if (drawingZone) {
-          addZonePoint(e.latLng.lat(), e.latLng.lng());
-        } else if (mode === 'drop-pin') {
-          handleMapClick(e.latLng.lat(), e.latLng.lng());
-        }
-      });
-      
-      console.log('Map initialized successfully');
-      setMapReady(true);
-      startLocationTracking();
-    } catch (error) {
-      console.error('Error initializing map:', error);
-    }
+    const map = new window.google.maps.Map(mapRef.current, {
+      center: { lat: 47.6062, lng: -122.3321 },
+      zoom: isMobile ? 12 : 13,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      styles: [
+        { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
+      ]
+    });
+    
+    mapInstanceRef.current = map;
+    
+    map.addListener('click', (e) => {
+      if (drawingZone) {
+        addZonePoint(e.latLng.lat(), e.latLng.lng());
+      } else if (mode === 'drop-pin') {
+        handleMapClick(e.latLng.lat(), e.latLng.lng());
+      }
+    });
+    
+    setMapReady(true);
+    startLocationTracking();
   };
 
   const loadTeamMembers = async () => {
@@ -1514,8 +1485,14 @@ function RepZoneApp() {
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<RepZoneApp />);
+window.startRepZoneApp = function() {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<RepZoneApp />);
+};
+
+if (window.googleMapsReady) {
+  window.startRepZoneApp();
+}
 </script>
 </body>
 </html>
