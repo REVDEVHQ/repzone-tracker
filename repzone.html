@@ -18,7 +18,6 @@
   @keyframes slideIn { from { transform: translateX(-400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes shimmer { 0% { background-position: -1000px 0; } 100% { background-position: 1000px 0; } }
   
   .tracking-indicator { animation: pulse 2s infinite; }
   
@@ -425,8 +424,11 @@ window.gm_authFailure = function() {
 };
 
 window.initGoogleMaps = function() {
-  console.log('Google Maps API loaded');
+  console.log('Google Maps loaded successfully');
   window.googleMapsReady = true;
+  if (window.startRepZoneApp) {
+    window.startRepZoneApp();
+  }
 };
 
 window.toggleMobileMenu = function() {
@@ -479,6 +481,8 @@ function RepZoneApp() {
   const [selectedZone, setSelectedZone] = useState(null);
   const [activeZoneId, setActiveZoneId] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserRole, setNewUserRole] = useState("rep");
   const [leaderboardPeriod, setLeaderboardPeriod] = useState('week');
   const [filter, setFilter] = useState({ status: "all", userId: "all" });
   const [drawingZone, setDrawingZone] = useState(false);
@@ -503,19 +507,10 @@ function RepZoneApp() {
   };
 
   useEffect(() => {
-    console.log('RepZone initializing...');
     supabase.current = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
-    
-    // Set up global callback for Google Maps
-    window.startRepZoneApp = () => {
-      console.log('Google Maps ready, initializing map...');
-      if (mapRef.current && !mapReady) {
-        initializeMap();
-      }
-    };
     
     initializeApp();
     
@@ -533,127 +528,100 @@ function RepZoneApp() {
     }
   }, [pins, zones, mapReady, filter]);
 
-  useEffect(() => {
-    if (!loading && window.googleMapsReady && mapRef.current && !mapReady) {
-      console.log('Loading finished, initializing map now...');
-      initializeMap();
-    }
-  }, [loading, mapReady]);
-
   const initializeApp = async () => {
-    try {
-      console.log('Initializing app...');
+    let userId = localStorage.getItem('repzone_user_id');
+    
+    if (!userId) {
+      userId = `user-${Date.now()}`;
+      localStorage.setItem('repzone_user_id', userId);
       
-      // Load team members first
-      await loadTeamMembers();
-      
-      let userId = localStorage.getItem('repzone_user_id');
-      
-      if (!userId) {
-        // Show user selection modal instead of prompt
-        console.log('No user ID found, showing modal');
-        setLoading(false);
-        setShowUserModal(true);
+      const userName = prompt('Enter your name:');
+      if (!userName) {
+        showToast('Name required to continue');
         return;
       }
       
-      console.log('Found user ID:', userId);
-      const { data: user, error } = await supabase.current
+      const { data: newUser, error } = await supabase.current
+        .from('team_members')
+        .insert([{
+          id: userId,
+          name: userName,
+          role: 'rep',
+          color: getRandomColor()
+        }])
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Error creating user:', error);
+        showToast('Error creating user');
+        return;
+      }
+      
+      setCurrentUser(newUser);
+    } else {
+      const { data: user } = await supabase.current
         .from('team_members')
         .select('*')
         .eq('id', userId)
         .single();
         
-      if (error) {
-        console.error('Error loading user:', error);
-      }
-        
       if (user) {
-        console.log('Loaded user:', user);
         setCurrentUser(user);
       } else {
-        console.log('User not found, clearing localStorage');
         localStorage.removeItem('repzone_user_id');
-        setLoading(false);
-        setShowUserModal(true);
+        initializeApp();
         return;
       }
-      
-      console.log('Loading additional data...');
-      await Promise.all([
-        loadPins(),
-        loadZones(),
-        loadLiveLocations()
-      ]);
-      
-      setLoading(false);
-      
-      if (window.googleMapsReady) {
-        console.log('Google Maps ready, initializing...');
-        initializeMap();
-      }
-    } catch (error) {
-      console.error('Initialization error:', error);
-      setLoading(false);
-      showToast('Error initializing app');
     }
+    
+    await Promise.all([
+      loadTeamMembers(),
+      loadPins(),
+      loadZones(),
+      loadLiveLocations()
+    ]);
+    
+    if (window.googleMapsReady) {
+      initializeMap();
+    } else {
+      window.startRepZoneApp = initializeMap;
+    }
+    
+    setLoading(false);
   };
 
   const initializeMap = () => {
-    console.log('Initializing map...', { mapRef: !!mapRef.current, google: !!window.google });
-    if (!mapRef.current || !window.google) {
-      console.error('Map ref or Google not ready');
-      return;
-    }
+    if (!mapRef.current || !window.google) return;
     
-    try {
-      const map = new window.google.maps.Map(mapRef.current, {
-        center: { lat: 47.6062, lng: -122.3321 },
-        zoom: isMobile ? 12 : 13,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        styles: [
-          { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
-        ]
-      });
-      
-      mapInstanceRef.current = map;
-      
-      map.addListener('click', (e) => {
-        if (drawingZone) {
-          addZonePoint(e.latLng.lat(), e.latLng.lng());
-        } else if (mode === 'drop-pin') {
-          handleMapClick(e.latLng.lat(), e.latLng.lng());
-        }
-      });
-      
-      console.log('Map initialized successfully');
-      setMapReady(true);
-      startLocationTracking();
-    } catch (error) {
-      console.error('Error initializing map:', error);
-    }
+    const map = new window.google.maps.Map(mapRef.current, {
+      center: { lat: 47.6062, lng: -122.3321 },
+      zoom: isMobile ? 12 : 13,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      styles: [
+        { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
+      ]
+    });
+    
+    mapInstanceRef.current = map;
+    
+    map.addListener('click', (e) => {
+      if (drawingZone) {
+        addZonePoint(e.latLng.lat(), e.latLng.lng());
+      } else if (mode === 'drop-pin') {
+        handleMapClick(e.latLng.lat(), e.latLng.lng());
+      }
+    });
+    
+    setMapReady(true);
+    startLocationTracking();
   };
 
   const loadTeamMembers = async () => {
-    try {
-      const { data, error } = await supabase.current
-        .from('team_members')
-        .select('*')
-        .order('name', { ascending: true });
-      
-      if (error) {
-        console.error('Error loading team members:', error);
-        showToast('Error loading team members');
-        return;
-      }
-      
-      console.log('Loaded team members:', data);
-      if (data) setTeamMembers(data);
-    } catch (error) {
-      console.error('Exception loading team members:', error);
-    }
+    const { data } = await supabase.current.from('team_members').select('*');
+    if (data) setTeamMembers(data);
   };
 
   const loadPins = async () => {
@@ -1136,59 +1104,40 @@ function RepZoneApp() {
             <p style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Door Knocking Tracker</p>
           </div>
 
-          {currentUser ? (
-            <>
-              <div className="user-badge">
-                <div className="user-avatar" style={{ background: currentUser.color }}>
-                  {currentUser.name[0].toUpperCase()}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '600', color: 'white' }}>{currentUser.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>
-                    {currentUser.role}
-                  </div>
-                </div>
-                <button 
-                  className="btn-secondary" 
-                  style={{ padding: '0.5rem 1rem', fontSize: '0.75rem' }}
-                  onClick={() => setShowUserModal(true)}
-                >
-                  Switch
-                </button>
+          {currentUser && (
+            <div className="user-badge">
+              <div className="user-avatar" style={{ background: currentUser.color }}>
+                {currentUser.name[0].toUpperCase()}
               </div>
-
-              <div className="tab-nav">
-                <div className={`tab ${activeTab === 'controls' ? 'active' : ''}`} onClick={() => setActiveTab('controls')}>
-                  Controls
-                </div>
-                <div className={`tab ${activeTab === 'zones' ? 'active' : ''}`} onClick={() => setActiveTab('zones')}>
-                  Zones
-                </div>
-                <div className={`tab ${activeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setActiveTab('leaderboard')}>
-                  Stats
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: '600', color: 'white' }}>{currentUser.name}</div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>
+                  {currentUser.role}
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👋</div>
-              <h3 style={{ color: 'white', fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-                Welcome to RepZone Pro
-              </h3>
-              <p style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
-                Select your account to get started
-              </p>
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%' }}
+              <button 
+                className="btn-secondary" 
+                style={{ padding: '0.5rem 1rem', fontSize: '0.75rem' }}
                 onClick={() => setShowUserModal(true)}
               >
-                Select Account
+                Switch
               </button>
             </div>
           )}
 
-          {currentUser && activeTab === 'controls' && (
+          <div className="tab-nav">
+            <div className={`tab ${activeTab === 'controls' ? 'active' : ''}`} onClick={() => setActiveTab('controls')}>
+              Controls
+            </div>
+            <div className={`tab ${activeTab === 'zones' ? 'active' : ''}`} onClick={() => setActiveTab('zones')}>
+              Zones
+            </div>
+            <div className={`tab ${activeTab === 'leaderboard' ? 'active' : ''}`} onClick={() => setActiveTab('leaderboard')}>
+              Stats
+            </div>
+          </div>
+
+          {activeTab === 'controls' && (
             <>
               <div className="card">
                 <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'white', marginBottom: '0.75rem' }}>
@@ -1278,7 +1227,7 @@ function RepZoneApp() {
             </>
           )}
 
-          {currentUser && activeTab === 'zones' && (
+          {activeTab === 'zones' && (
             <>
               <div className="card">
                 <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'white', marginBottom: '1rem' }}>
@@ -1338,7 +1287,7 @@ function RepZoneApp() {
             </>
           )}
 
-          {currentUser && activeTab === 'leaderboard' && (
+          {activeTab === 'leaderboard' && (
             <>
               <div className="card">
                 <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'white', marginBottom: '1rem' }}>
@@ -1488,67 +1437,46 @@ function RepZoneApp() {
       )}
 
       {showUserModal && (
-        <div className="modal" onClick={() => !currentUser && showToast('Please select a user')}>
+        <div className="modal" onClick={() => setShowUserModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white', marginBottom: '1.5rem' }}>
-              {currentUser ? 'Switch User' : 'Select Your Account'}
+              Switch User
             </h2>
             
-            {teamMembers.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
-                <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
-                <p>Loading team members...</p>
-              </div>
-            ) : (
-              <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                {teamMembers.map(member => (
-                  <div
-                    key={member.id}
-                    className="leaderboard-item"
-                    style={{ cursor: 'pointer' }}
-                    onClick={async () => {
-                      localStorage.setItem('repzone_user_id', member.id);
-                      setCurrentUser(member);
-                      setShowUserModal(false);
-                      
-                      // Load data and initialize map
-                      await Promise.all([
-                        loadPins(),
-                        loadZones(),
-                        loadLiveLocations()
-                      ]);
-                      
-                      if (window.googleMapsReady && mapRef.current && !mapReady) {
-                        initializeMap();
-                      }
-                    }}
-                  >
-                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '700', fontSize: '1.25rem' }}>
-                      {member.name[0].toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '600', color: 'white', fontSize: '1.0625rem' }}>{member.name}</div>
-                      <div style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>
-                        {member.email}
-                      </div>
-                    </div>
-                    {currentUser?.id === member.id && (
-                      <div style={{ color: '#10b981', fontWeight: '700', fontSize: '1.25rem' }}>✓</div>
-                    )}
+            <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '1.5rem' }}>
+              {teamMembers.map(member => (
+                <div
+                  key={member.id}
+                  className="leaderboard-item"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => {
+                    localStorage.setItem('repzone_user_id', member.id);
+                    window.location.reload();
+                  }}
+                >
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '700' }}>
+                    {member.name[0].toUpperCase()}
                   </div>
-                ))}
-              </div>
-            )}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '600', color: 'white' }}>{member.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>
+                      {member.role}
+                    </div>
+                  </div>
+                  {currentUser?.id === member.id && (
+                    <div style={{ color: '#10b981', fontWeight: '600' }}>✓ Current</div>
+                  )}
+                </div>
+              ))}
+            </div>
             
-            {currentUser && teamMembers.length > 0 && (
-              <button
-                className="btn btn-secondary"
-                style={{ width: '100%', marginTop: '1.5rem' }}
-                onClick={() => setShowUserModal(false)}
-              >
-                Cancel
-              </button>
-            )}
+            <button
+              className="btn btn-secondary"
+              style={{ width: '100%' }}
+              onClick={() => setShowUserModal(false)}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -1556,8 +1484,14 @@ function RepZoneApp() {
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<RepZoneApp />);
+window.startRepZoneApp = function() {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<RepZoneApp />);
+};
+
+if (window.googleMapsReady) {
+  window.startRepZoneApp();
+}
 </script>
 </body>
 </html>
