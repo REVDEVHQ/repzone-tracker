@@ -185,16 +185,17 @@
 <body>
 <div id="root"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   window.initGoogleMaps = function() {
     console.log('✅ Google Maps loaded');
     window.googleMapsReady = true;
-    if (window.startRepZoneApp) window.startRepZoneApp();
+    if (window.startRepZoneApp) {
+      window.startRepZoneApp();
+    }
   };
 </script>
-<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyALxYqoe16YGS8s9wVO64jiKuI3hpkcvI0&libraries=places,geometry&callback=initGoogleMaps"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyALxYqoe16YGS8s9wVO64jiKuI3hpkcvI0&libraries=places,geometry&callback=initGoogleMaps&loading=async"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -352,19 +353,6 @@ function RepZoneApp() {
       } catch (e) {
         console.error('Error parsing saved user:', e);
       }
-    } else {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setCurrentLocation({
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-              timestamp: Date.now()
-            });
-          },
-          () => {}
-        );
-      }
     }
   }, []);
 
@@ -380,14 +368,16 @@ function RepZoneApp() {
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const { data, error } = await supabase.current.from('live_locations').select('*').gte('last_updated', fiveMinutesAgo).eq('is_active', true);
       if (!error && data) setLiveLocations(data);
-    } catch (e) {}
+    } catch (e) {
+      console.error('Error loading live locations:', e);
+    }
   }
 
   function requestLocationPermission(user) {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       () => startLocationTracking(user),
-      () => {}
+      (error) => console.error('GPS permission error:', error)
     );
   }
 
@@ -467,10 +457,20 @@ function RepZoneApp() {
   }
 
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current || loading || !window.google) return;
+    if (!mapRef.current || mapInstanceRef.current || loading) return;
     
-    window.startRepZoneApp = initMap;
-    if (window.googleMapsReady) initMap();
+    const waitForGoogle = () => {
+      if (window.google && window.google.maps) {
+        initMap();
+      } else {
+        setTimeout(waitForGoogle, 100);
+      }
+    };
+    
+    window.startRepZoneApp = waitForGoogle;
+    if (window.googleMapsReady) {
+      waitForGoogle();
+    }
   }, [loading]);
 
   function initMap() {
