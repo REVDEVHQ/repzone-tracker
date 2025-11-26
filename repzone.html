@@ -564,33 +564,10 @@ function RepZoneApp() {
     let userId = localStorage.getItem('repzone_user_id');
     
     if (!userId) {
-      userId = `user-${Date.now()}`;
-      localStorage.setItem('repzone_user_id', userId);
-      
-      const userName = prompt('Enter your name:');
-      if (!userName) {
-        showToast('Name required to continue');
-        return;
-      }
-      
-      const { data: newUser, error } = await supabase.current
-        .from('team_members')
-        .insert([{
-          id: userId,
-          name: userName,
-          role: 'rep',
-          color: getRandomColor()
-        }])
-        .select()
-        .single();
-        
-      if (error) {
-        console.error('Error creating user:', error);
-        showToast('Error creating user');
-        return;
-      }
-      
-      setCurrentUser(newUser);
+      // No user saved - show user selection modal
+      setShowUserModal(true);
+      await loadTeamMembers();
+      return;
     } else {
       const { data: user } = await supabase.current
         .from('team_members')
@@ -602,7 +579,8 @@ function RepZoneApp() {
         setCurrentUser(user);
       } else {
         localStorage.removeItem('repzone_user_id');
-        initializeApp();
+        setShowUserModal(true);
+        await loadTeamMembers();
         return;
       }
     }
