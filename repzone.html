@@ -561,36 +561,40 @@ function RepZoneApp() {
   }, [pins, zones, mapReady, filter]);
 
   const initializeApp = async () => {
+    // Always load team members first
+    await loadTeamMembers();
+    
     let userId = localStorage.getItem('repzone_user_id');
     
     if (!userId) {
       // No user saved - show user selection modal
       setShowUserModal(true);
-      await loadTeamMembers();
+      setLoading(false);
       return;
-    } else {
-      const { data: user } = await supabase.current
-        .from('team_members')
-        .select('*')
-        .eq('id', userId)
-        .single();
-        
-      if (user) {
-        setCurrentUser(user);
-      } else {
-        localStorage.removeItem('repzone_user_id');
-        setShowUserModal(true);
-        await loadTeamMembers();
-        return;
-      }
     }
     
-    await Promise.all([
-      loadTeamMembers(),
-      loadPins(),
-      loadZones(),
-      loadLiveLocations()
-    ]);
+    const { data: user } = await supabase.current
+      .from('team_members')
+      .select('*')
+      .eq('id', userId)
+      .single();
+      
+    if (user) {
+      setCurrentUser(user);
+      // Load all data
+      await Promise.all([
+        loadPins(),
+        loadZones(),
+        loadLiveLocations()
+      ]);
+    } else {
+      // User not found - clear and show modal
+      localStorage.removeItem('repzone_user_id');
+      setShowUserModal(true);
+    }
+    
+    setLoading(false);
+  };
     
     if (window.googleMapsReady) {
       initializeMap();
