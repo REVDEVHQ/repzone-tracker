@@ -328,6 +328,7 @@ function RepZoneApp() {
   
   // NEW: Route & CRM states
   const [routeMode, setRouteMode] = useState(false);
+  const [addingRoutePoint, setAddingRoutePoint] = useState(false);
   const [currentRoute, setCurrentRoute] = useState(null);
   const [routePoints, setRoutePoints] = useState([]);
   const [showRouteModal, setShowRouteModal] = useState(false);
@@ -521,6 +522,14 @@ function RepZoneApp() {
     }
 
     map.addListener('click', (e) => {
+      // Route point mode takes priority
+      if (addingRoutePoint) {
+        addRoutePoint(e.latLng.lat(), e.latLng.lng());
+        setAddingRoutePoint(false);
+        return;
+      }
+      
+      // Regular pin dropping
       if (!currentUser) return;
       
       if (!currentLocation) {
@@ -636,6 +645,7 @@ function RepZoneApp() {
       setRoutePoints([]);
       setRouteName('');
       setShowRouteModal(false);
+      setAddingRoutePoint(false);
       if (routePolylineRef.current) {
         routePolylineRef.current.setMap(null);
       }
@@ -648,6 +658,7 @@ function RepZoneApp() {
   function clearRoute() {
     setRoutePoints([]);
     setRouteName('');
+    setAddingRoutePoint(false);
     if (routePolylineRef.current) {
       routePolylineRef.current.setMap(null);
     }
@@ -995,12 +1006,38 @@ function RepZoneApp() {
 
       {routeMode && (
         <div className="stat-card" style={{marginBottom:'1rem',background:'#dbeafe',border:'2px solid #3b82f6'}}>
-          <div style={{fontSize:'14px',fontWeight:'700',marginBottom:'8px',color:'#1e293b'}}>🗺️ Route Mode</div>
-          <p style={{fontSize:'12px',color:'#64748b',marginBottom:'12px'}}>Tap map to add points ({routePoints.length} added)</p>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
-            <button onClick={() => setShowRouteModal(true)} disabled={routePoints.length < 2} className="modern-button" style={{padding:'10px',background:routePoints.length < 2 ? '#94a3b8' : '#10b981',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'700'}}>💾 Save</button>
-            <button onClick={clearRoute} className="modern-button" style={{padding:'10px',background:'#ef4444',color:'white',border:'none',borderRadius:'8px',fontSize:'12px',fontWeight:'700'}}>🗑️ Clear</button>
+          <div style={{fontSize:'14px',fontWeight:'700',marginBottom:'8px',color:'#1e293b'}}>🗺️ Route Planning</div>
+          <p style={{fontSize:'12px',color:'#64748b',marginBottom:'12px'}}>
+            {addingRoutePoint 
+              ? '📍 Tap the map now...' 
+              : `Tap "Add Point" then tap map (${routePoints.length} added)`
+            }
+          </p>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'6px'}}>
+            <button 
+              onClick={() => {
+                setAddingRoutePoint(true);
+                showToast('📍 Tap the map to add point');
+              }} 
+              disabled={addingRoutePoint}
+              className="modern-button" 
+              style={{
+                padding:'8px',
+                background: addingRoutePoint ? '#10b981' : '#3b82f6',
+                color:'white',
+                border:'none',
+                borderRadius:'8px',
+                fontSize:'11px',
+                fontWeight:'700',
+                cursor: addingRoutePoint ? 'wait' : 'pointer'
+              }}
+            >
+              {addingRoutePoint ? '📍 Tap...' : '➕ Point'}
+            </button>
+            <button onClick={() => setShowRouteModal(true)} disabled={routePoints.length < 2} className="modern-button" style={{padding:'8px',background:routePoints.length < 2 ? '#94a3b8' : '#10b981',color:'white',border:'none',borderRadius:'8px',fontSize:'11px',fontWeight:'700'}}>💾 Save</button>
+            <button onClick={clearRoute} className="modern-button" style={{padding:'8px',background:'#ef4444',color:'white',border:'none',borderRadius:'8px',fontSize:'11px',fontWeight:'700'}}>🗑️ Clear</button>
           </div>
+          <p style={{fontSize:'11px',color:'#3b82f6',fontWeight:'700',marginTop:'8px',textAlign:'center'}}>💡 Still drop pins normally</p>
         </div>
       )}
 
@@ -1016,6 +1053,27 @@ function RepZoneApp() {
 
       {!routeMode && (
         <>
+          <div style={{marginBottom:'1rem'}}>
+            <label style={{display:'block',fontSize:'0.875rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e293b'}}>🗺️ Assign to Route (Optional)</label>
+            <select 
+              value={currentRoute?.id || ''} 
+              onChange={(e) => {
+                const route = routes.find(r => r.id === e.target.value);
+                setCurrentRoute(route || null);
+                if (route) {
+                  showToast(`📍 Pins → ${route.name}`);
+                  viewRoute(route);
+                }
+              }}
+              style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.875rem',fontWeight:'600',background:'white'}}
+            >
+              <option value="">No Route</option>
+              {routes.map(route => (
+                <option key={route.id} value={route.id}>{route.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div style={{marginBottom:'1rem'}}>
             <label style={{display:'block',fontSize:'0.875rem',fontWeight:'700',marginBottom:'0.75rem',color:'#1e293b'}}>🔍 Search Address</label>
             <input ref={searchBoxRef} type="text" placeholder="Search for a place..." style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.875rem',fontWeight:'600'}}/>
@@ -1236,12 +1294,39 @@ function RepZoneApp() {
 
               {routeMode && (
                 <div className="stat-card" style={{marginBottom:'1.25rem',background:'#dbeafe',border:'2px solid #3b82f6'}}>
-                  <div style={{fontSize:'16px',fontWeight:'700',marginBottom:'8px',color:'#1e293b'}}>🗺️ Route Mode Active</div>
-                  <p style={{fontSize:'13px',color:'#64748b',marginBottom:'16px'}}>Click on the map to add route points. You've added {routePoints.length} point{routePoints.length !== 1 ? 's' : ''}.</p>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
-                    <button onClick={() => setShowRouteModal(true)} disabled={routePoints.length < 2} className="modern-button" style={{padding:'12px',background:routePoints.length < 2 ? '#94a3b8' : '#10b981',color:'white',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:'700',cursor:routePoints.length < 2?'not-allowed':'pointer'}}>💾 Save Route</button>
-                    <button onClick={clearRoute} className="modern-button" style={{padding:'12px',background:'#ef4444',color:'white',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:'700'}}>🗑️ Clear</button>
+                  <div style={{fontSize:'16px',fontWeight:'700',marginBottom:'8px',color:'#1e293b'}}>🗺️ Route Planning Mode</div>
+                  <p style={{fontSize:'13px',color:'#64748b',marginBottom:'16px'}}>
+                    {addingRoutePoint 
+                      ? '📍 Click anywhere on the map to add a route point...' 
+                      : `Click "Add Point" then click the map. You've added ${routePoints.length} point${routePoints.length !== 1 ? 's' : ''}.`
+                    }
+                  </p>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'12px'}}>
+                    <button 
+                      onClick={() => {
+                        setAddingRoutePoint(true);
+                        showToast('📍 Now click the map to add a route point');
+                      }} 
+                      disabled={addingRoutePoint}
+                      className="modern-button" 
+                      style={{
+                        padding:'10px',
+                        background: addingRoutePoint ? '#10b981' : '#3b82f6',
+                        color:'white',
+                        border:'none',
+                        borderRadius:'10px',
+                        fontSize:'13px',
+                        fontWeight:'700',
+                        cursor: addingRoutePoint ? 'wait' : 'pointer',
+                        animation: addingRoutePoint ? 'pulse 2s infinite' : 'none'
+                      }}
+                    >
+                      {addingRoutePoint ? '📍 Click Map...' : '➕ Add Point'}
+                    </button>
+                    <button onClick={() => setShowRouteModal(true)} disabled={routePoints.length < 2} className="modern-button" style={{padding:'10px',background:routePoints.length < 2 ? '#94a3b8' : '#10b981',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:'700',cursor:routePoints.length < 2?'not-allowed':'pointer'}}>💾 Save</button>
+                    <button onClick={clearRoute} className="modern-button" style={{padding:'10px',background:'#ef4444',color:'white',border:'none',borderRadius:'10px',fontSize:'13px',fontWeight:'700'}}>🗑️ Clear</button>
                   </div>
+                  <p style={{fontSize:'12px',color:'#3b82f6',fontWeight:'700',textAlign:'center'}}>💡 You can still drop pins normally while planning routes</p>
                 </div>
               )}
 
@@ -1277,6 +1362,27 @@ function RepZoneApp() {
 
               {!routeMode && (
                 <>
+                  <div className="stat-card" style={{marginBottom:'1.25rem'}}>
+                    <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.875rem',color:'#1e293b'}}>🗺️ Assign to Route (Optional)</label>
+                    <select 
+                      value={currentRoute?.id || ''} 
+                      onChange={(e) => {
+                        const route = routes.find(r => r.id === e.target.value);
+                        setCurrentRoute(route || null);
+                        if (route) {
+                          showToast(`📍 Pins will be assigned to: ${route.name}`);
+                          viewRoute(route);
+                        }
+                      }}
+                      style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600',background:'white'}}
+                    >
+                      <option value="">No Route (Drop anywhere)</option>
+                      {routes.map(route => (
+                        <option key={route.id} value={route.id}>{route.name} ({route.points?.length || 0} pts)</option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="stat-card" style={{marginBottom:'1.25rem'}}>
                     <label style={{display:'block',fontSize:'0.9375rem',fontWeight:'700',marginBottom:'0.875rem',color:'#1e293b'}}>🔍 Search Address</label>
                     <input ref={searchBoxRef} type="text" placeholder="Search for a place..." style={{width:'100%',padding:'0.875rem',border:'2px solid #e5e7eb',borderRadius:'0.75rem',fontSize:'0.9375rem',fontWeight:'600'}}/>
