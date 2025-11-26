@@ -521,26 +521,24 @@ function RepZoneApp() {
     }
 
     map.addListener('click', (e) => {
-      if (routeMode) {
-        addRoutePoint(e.latLng.lat(), e.latLng.lng());
-      } else if (mode === "drop-pin" && currentUser) {
-        if (!currentLocation) {
-          showToast('⚠️ Enable GPS tracking first!');
-          return;
-        }
+      if (!currentUser) return;
+      
+      if (!currentLocation) {
+        showToast('⚠️ Enable GPS tracking first!');
+        return;
+      }
 
-        if (!isGPSFresh(currentLocation)) {
-          const age = getGPSAge(currentLocation);
-          showToast(`⚠️ GPS data is ${age}s old! Move around to get fresh GPS signal.`, 6000);
-          return;
-        }
+      if (!isGPSFresh(currentLocation)) {
+        const age = getGPSAge(currentLocation);
+        showToast(`⚠️ GPS data is ${age}s old! Move around to get fresh GPS signal.`, 6000);
+        return;
+      }
 
-        if (fdMode) {
-          dropPinAtLocation(e.latLng.lat(), e.latLng.lng(), '', '', '', '');
-        } else {
-          setPendingPinLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-          setShowCustomerForm(true);
-        }
+      if (fdMode) {
+        dropPinAtLocation(e.latLng.lat(), e.latLng.lng(), '', '', '', '');
+      } else {
+        setPendingPinLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+        setShowCustomerForm(true);
       }
     });
 
@@ -572,22 +570,26 @@ function RepZoneApp() {
   }
 
   function drawRoute(points) {
-    if (!mapInstanceRef.current || points.length < 2) return;
+    if (!mapInstanceRef.current || points.length < 1) return;
 
     if (routePolylineRef.current) {
       routePolylineRef.current.setMap(null);
     }
 
-    const path = points.map(p => ({ lat: p.lat, lng: p.lng }));
-    
-    routePolylineRef.current = new google.maps.Polyline({
-      path: path,
-      geodesic: true,
-      strokeColor: '#3b82f6',
-      strokeOpacity: 1.0,
-      strokeWeight: 4,
-      map: mapInstanceRef.current
-    });
+    const routeColor = currentUser?.color || '#3b82f6';
+
+    if (points.length >= 2) {
+      const path = points.map(p => ({ lat: p.lat, lng: p.lng }));
+      
+      routePolylineRef.current = new google.maps.Polyline({
+        path: path,
+        geodesic: true,
+        strokeColor: routeColor,
+        strokeOpacity: 1.0,
+        strokeWeight: 4,
+        map: mapInstanceRef.current
+      });
+    }
 
     points.forEach((point, idx) => {
       new google.maps.Marker({
@@ -602,7 +604,7 @@ function RepZoneApp() {
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           scale: 20,
-          fillColor: '#3b82f6',
+          fillColor: routeColor,
           fillOpacity: 1,
           strokeColor: 'white',
           strokeWeight: 3
@@ -988,7 +990,7 @@ function RepZoneApp() {
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'8px',marginBottom:'16px'}}>
         <button onClick={() => setShowCRM(true)} className="modern-button" style={{padding:'12px',background:'#8b5cf6',color:'white',border:'none',borderRadius:'12px',fontWeight:'700',fontSize:'14px'}}>📋 CRM</button>
-        <button onClick={() => {setRouteMode(!routeMode);if(!routeMode){setMode('route');}else{setMode('drop-pin');clearRoute();}}} className="modern-button" style={{padding:'12px',background:routeMode?'#ef4444':'#3b82f6',color:'white',border:'none',borderRadius:'12px',fontWeight:'700',fontSize:'14px'}}>{routeMode ? '✕ Exit' : '🗺️ Route'}</button>
+        <button onClick={() => {setRouteMode(!routeMode);if(routeMode){clearRoute();}}} className="modern-button" style={{padding:'12px',background:routeMode?'#ef4444':'#3b82f6',color:'white',border:'none',borderRadius:'12px',fontWeight:'700',fontSize:'14px'}}>{routeMode ? '✕ Exit' : '🗺️ Route'}</button>
       </div>
 
       {routeMode && (
@@ -1229,7 +1231,7 @@ function RepZoneApp() {
             <div style={{flex:1,overflowY:'auto',padding:'1.25rem'}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'20px'}}>
                 <button onClick={() => setShowCRM(true)} className="modern-button" style={{padding:'14px',background:'#8b5cf6',color:'white',border:'none',borderRadius:'12px',fontWeight:'700',fontSize:'14px',boxShadow:'0 2px 8px rgba(139,92,246,0.3)'}}>📋 CRM</button>
-                <button onClick={() => {setRouteMode(!routeMode);if(!routeMode){setMode('route');}else{setMode('drop-pin');clearRoute();}}} className="modern-button" style={{padding:'14px',background:routeMode?'#ef4444':'#3b82f6',color:'white',border:'none',borderRadius:'12px',fontWeight:'700',fontSize:'14px',boxShadow:routeMode?'0 2px 8px rgba(239,68,68,0.3)':'0 2px 8px rgba(59,130,246,0.3)'}}>{routeMode ? '✕ Exit Route' : '🗺️ Create Route'}</button>
+                <button onClick={() => {setRouteMode(!routeMode);if(routeMode){clearRoute();}}} className="modern-button" style={{padding:'14px',background:routeMode?'#ef4444':'#3b82f6',color:'white',border:'none',borderRadius:'12px',fontWeight:'700',fontSize:'14px',boxShadow:routeMode?'0 2px 8px rgba(239,68,68,0.3)':'0 2px 8px rgba(59,130,246,0.3)'}}>{routeMode ? '✕ Exit Route' : '🗺️ Create Route'}</button>
               </div>
 
               {routeMode && (
